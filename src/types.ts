@@ -1,0 +1,221 @@
+export type TabType =
+  | 'operations'
+  | 'customers'
+  | 'customerDetails'
+  | 'warehouse'
+  | 'summary'
+  | 'expenses'
+  | 'assistant'
+  | 'reconciliation'
+  | 'attendance'
+  | 'vehicles';
+
+export type AssistantPersonaId = 'deniz' | 'nueng' | 'snow';
+
+export interface ChatMessage {
+  id: string;
+  role: 'user' | 'model';
+  text: string;
+  timestamp: string;
+}
+
+export interface Employee {
+  id: string;
+  name: string;
+  phone?: string;
+  note?: string;
+}
+
+export interface AttendanceRecord {
+  id: string;
+  employeeId: string;
+  employeeName: string;
+  date: string;
+  checkIn?: string;
+  checkOut?: string;
+  note?: string;
+}
+
+export interface Vehicle {
+  id: string;
+  plateNumber: string;
+  note?: string;
+}
+
+export interface VehicleLogEntry {
+  id: string;
+  vehicleId: string;
+  vehiclePlate: string;
+  date: string;
+  type: 'fuel' | 'repair';
+  amount: number;
+  description: string;
+  attachmentDataUrl?: string;
+  attachmentName?: string;
+}
+
+export type PaymentStatus = 'Cash' | 'Debt' | 'Credit' | 'OldPayment' | 'NewAndOld';
+
+export interface PaymentStatusDetails {
+  status: PaymentStatus;
+  newAmountPaid?: number;
+  oldDebtPaid?: number;
+}
+
+export interface IceProduct {
+  id: string;
+  key: string;
+  labelTh: string;
+  unit: string;
+  icon: string;
+  imageUrl?: string;
+  pricePerUnit: number;
+  isSystem?: boolean;
+}
+
+export type IceQuantity = Record<string, number>;
+
+export interface DeliveryRecord {
+  id: string;
+  time: string;
+  customerName: string;
+  summaryText: string;
+  totalAmount: number;
+  status: PaymentStatus;
+  statusDetails?: PaymentStatusDetails;
+  date: string;
+  routeId?: string;
+  routeName?: string;
+  timeRound?: string;
+}
+
+export interface IceBucketHolding {
+  id: string;
+  bucketSize: string;
+  count: number;
+  note?: string;
+}
+
+export interface CustomerAccount {
+  id: string;
+  code: string;
+  name: string;
+  route: string;
+  quantities: IceQuantity;
+  extraAmount: number; // เศษเงิน
+  totalAmount: number;
+  status: PaymentStatus;
+  statusDetails?: PaymentStatusDetails;
+  lastUpdated?: string;
+  customPrices?: Partial<Record<string, number>>;
+  accumulatedDebt?: number; // ยอดค้างชำระสะสมเดิม
+  iceBuckets?: IceBucketHolding[]; // ถังน้ำแข็งประจำร้าน
+  paymentHistory?: {
+    id: string;
+    date: string;
+    amountPaid: number;
+    debtRemaining: number;
+    type: 'DAILY_BILL' | 'DEBT_SETTLEMENT';
+    note?: string;
+  }[];
+}
+
+export interface WarehouseItem {
+  id: string;
+  name: string;
+  category: 'น้ำแข็งสำเร็จรูป/ห้องเย็น' | 'ถุง/บรรจุภัณฑ์' | 'ถังน้ำแข็งเปล่า' | 'วัสดุ/อื่นๆ';
+  quantity: number;
+  unit: string;
+  minThreshold: number;
+  lastUpdated: string;
+}
+
+export interface WarehouseLog {
+  id: string;
+  timestamp: string;
+  date: string;
+  itemId: string;
+  itemName: string;
+  type: 'IN' | 'OUT' | 'ADJUST';
+  quantity: number;
+  operatorName: string; // ใครนำเข้า-ออก
+  notes?: string;
+}
+
+export type RouteType = 'storefront' | 'mobile';
+
+export interface RouteItem {
+  id: string;
+  name: string;
+  driverName?: string;
+  order?: number;
+  type?: RouteType;
+}
+
+export interface TruckStockRecord {
+  id: string;
+  date: string;
+  shift: string;
+  timeRound?: string;
+  routeId: string;
+  routeName: string;
+  driverName: string;
+  vehicleType?: string;
+  licensePlate?: string;
+  loadedQuantities: IceQuantity;
+  returnedQuantities: IceQuantity;
+  cashCollected?: number;
+  updatedAt: string;
+}
+
+export type RoleLevel = 'owner' | 'accountant' | 'staff';
+
+export interface AdminUser {
+  id: string;
+  name: string;
+  role: string;
+  roleLevel: RoleLevel;
+  pin: string;
+}
+
+export interface ExpenseItem {
+  id: string;
+  time: string;
+  route?: string;
+  category: 'Fuel' | 'Wages' | 'Utilities' | 'Maintenance' | 'Packaging' | 'Other';
+  categoryTh: string;
+  icon: string;
+  description: string;
+  amount: number;
+  status: 'Cash' | 'Debt';
+  date: string;
+}
+
+export interface MonthlyFixedExpense {
+  id: string;
+  month: string; // YYYY-MM format
+  name: string;
+  amount: number;
+}
+
+export interface OperationSummaryStats {
+  todaySales: number;
+  cashAccumulated: number;
+  debtAmount: number;
+  billCount: number;
+  shiftWorker: string;
+}
+
+export interface SummaryOperationsData {
+  totalRevenue: number;
+  cashRevenue: number;
+  creditRevenue: number;
+  cubeCount: number;
+  cubeTrend: string;
+  crushedCount: number;
+  crushedTrend: string;
+  largeTubeCount: number;
+  largeTubeTrend: string;
+  smallTubeCount: number;
+  smallTubeTrend: string;
+}

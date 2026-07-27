@@ -1,0 +1,6 @@
+{
+  "name": "Tharnthong Ice",
+  "description": "แอปพลิเคชันบริหารจัดการและลงบัญชีโรงงานน้ำแข็ง ธารทอง น้ำแข็ง (Tharnthong Ice Operations & Accounting App)",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
