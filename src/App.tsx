@@ -11,6 +11,7 @@ import {
   MonthlyFixedExpense,
   OperationSummaryStats,
   PaymentStatusDetails,
+  PaymentStatusLabels,
   RoleLevel,
   RouteItem,
   SummaryOperationsData,
@@ -40,6 +41,8 @@ import { BottomNav } from './components/BottomNav';
 import { OperationsView } from './components/OperationsView';
 import { CustomersView } from './components/CustomersView';
 import { CustomerDetailsView } from './components/CustomerDetailsView';
+import { CreditCustomersView } from './components/CreditCustomersView';
+import { PaymentStatusLabelsModal } from './components/PaymentStatusLabelsModal';
 import { WarehouseView } from './components/WarehouseView';
 import { SummaryView } from './components/SummaryView';
 import { ExpensesView } from './components/ExpensesView';
@@ -61,6 +64,7 @@ import { VehicleManagerModal } from './components/VehicleManagerModal';
 import { VehicleLogView } from './components/VehicleLogView';
 import { buildBusinessContext } from './lib/assistantContext';
 import { canAccessTab } from './lib/permissions';
+import { DEFAULT_PAYMENT_STATUS_LABELS } from './lib/paymentStatusLabels';
 
 const INITIAL_ADMINS: AdminUser[] = [
   { id: 'ADMIN-1', name: 'Dumrong (เจ้าของร้าน)', role: 'เจ้าของร้าน / ผู้จัดการ', roleLevel: 'owner', pin: '501442' },
@@ -163,6 +167,12 @@ export default function App() {
     return saved ? JSON.parse(saved) : INITIAL_EXPENSES;
   });
 
+  // Payment Status Labels (editable by owner/accountant)
+  const [statusLabels, setStatusLabels] = useState<PaymentStatusLabels>(() => {
+    const saved = localStorage.getItem('tharnthong_status_labels');
+    return saved ? { ...DEFAULT_PAYMENT_STATUS_LABELS, ...JSON.parse(saved) } : DEFAULT_PAYMENT_STATUS_LABELS;
+  });
+
   // Warehouse Items & Logs State
   const [warehouseItems, setWarehouseItems] = useState(() => {
     const saved = localStorage.getItem('tharnthong_warehouse_items');
@@ -215,6 +225,7 @@ export default function App() {
   const [isRouteManagerOpen, setIsRouteManagerOpen] = useState(false);
   const [isEmployeeManagerOpen, setIsEmployeeManagerOpen] = useState(false);
   const [isVehicleManagerOpen, setIsVehicleManagerOpen] = useState(false);
+  const [isStatusLabelsModalOpen, setIsStatusLabelsModalOpen] = useState(false);
   const [customerForPriceModal, setCustomerForPriceModal] = useState<CustomerAccount | null>(null);
   const [newAndOldModalCustomer, setNewAndOldModalCustomer] = useState<CustomerAccount | null>(null);
 
@@ -269,6 +280,10 @@ export default function App() {
   useEffect(() => {
     localStorage.setItem('tharnthong_expenses', JSON.stringify(expenses));
   }, [expenses]);
+
+  useEffect(() => {
+    localStorage.setItem('tharnthong_status_labels', JSON.stringify(statusLabels));
+  }, [statusLabels]);
 
   useEffect(() => {
     localStorage.setItem('tharnthong_warehouse_items', JSON.stringify(warehouseItems));
@@ -599,6 +614,11 @@ export default function App() {
     showToast('บันทึกข้อมูลการลงบัญชีลูกค้าทั้งหมดเรียบร้อยแล้ว');
   };
 
+  // Handler: Update Payment Status Labels
+  const handleUpdateStatusLabels = (labels: PaymentStatusLabels) => {
+    setStatusLabels(labels);
+  };
+
   // Handler: Add new Customer
   const handleAddCustomer = (newCustData: Omit<CustomerAccount, 'id'>) => {
     const newCust: CustomerAccount = {
@@ -744,18 +764,31 @@ export default function App() {
             customers={customers}
             routes={routes}
             products={products}
+            statusLabels={statusLabels}
+            roleLevel={roleLevel}
             onUpdateCustomer={handleUpdateCustomer}
             onDeleteCustomer={handleDeleteCustomer}
             onOpenPriceModal={(customer) => setCustomerForPriceModal(customer)}
             onOpenNewAndOldModal={(customer) => setNewAndOldModalCustomer(customer)}
             onOpenRouteManager={() => setIsRouteManagerOpen(true)}
             onOpenProductManager={() => setIsProductManagerOpen(true)}
+            onOpenStatusLabelsModal={() => setIsStatusLabelsModalOpen(true)}
             onSaveAll={handleSaveAllCustomers}
             onOpenAddModal={() => setIsAddCustomerOpen(true)}
             onShowToast={showToast}
             selectedDate={selectedDate}
             onDateChange={(d) => setSelectedDate(d)}
             currentShift={currentShift}
+          />
+        )}
+
+        {activeTab === 'creditCustomers' && (
+          <CreditCustomersView
+            customers={customers}
+            onUpdateCustomer={handleUpdateCustomer}
+            onShowToast={showToast}
+            selectedDate={selectedDate}
+            onDateChange={(d) => setSelectedDate(d)}
           />
         )}
 
@@ -925,6 +958,14 @@ export default function App() {
         onUpdateRoute={handleUpdateRoute}
         onDeleteRoute={handleDeleteRoute}
         onMoveRoute={handleMoveRoute}
+        onShowToast={showToast}
+      />
+
+      <PaymentStatusLabelsModal
+        isOpen={isStatusLabelsModalOpen}
+        onClose={() => setIsStatusLabelsModalOpen(false)}
+        labels={statusLabels}
+        onSaveLabels={handleUpdateStatusLabels}
         onShowToast={showToast}
       />
 

@@ -1,17 +1,22 @@
 import React, { useState } from 'react';
-import { CustomerAccount, IceProduct, IceQuantity, PaymentStatus, RouteItem } from '../types';
+import { CustomerAccount, IceProduct, IceQuantity, PaymentStatus, PaymentStatusLabels, RoleLevel, RouteItem } from '../types';
 import { IceBucketManagerModal } from './IceBucketManagerModal';
+import { ConfirmStatusModal } from './ConfirmStatusModal';
+import { canEditPaymentStatusLabels } from '../lib/permissions';
 
 interface CustomersViewProps {
   customers: CustomerAccount[];
   routes: RouteItem[];
   products: IceProduct[];
+  statusLabels: PaymentStatusLabels;
+  roleLevel: RoleLevel;
   onUpdateCustomer: (id: string, updated: Partial<CustomerAccount>) => void;
   onDeleteCustomer: (id: string) => void;
   onOpenPriceModal: (customer: CustomerAccount) => void;
   onOpenNewAndOldModal: (customer: CustomerAccount) => void;
   onOpenRouteManager: () => void;
   onOpenProductManager: () => void;
+  onOpenStatusLabelsModal: () => void;
   onSaveAll: () => void;
   onOpenAddModal: () => void;
   onShowToast: (msg: string) => void;
@@ -24,12 +29,15 @@ export const CustomersView: React.FC<CustomersViewProps> = ({
   customers,
   routes,
   products,
+  statusLabels,
+  roleLevel,
   onUpdateCustomer,
   onDeleteCustomer,
   onOpenPriceModal,
   onOpenNewAndOldModal,
   onOpenRouteManager,
   onOpenProductManager,
+  onOpenStatusLabelsModal,
   onSaveAll,
   onOpenAddModal,
   onShowToast,
@@ -40,6 +48,10 @@ export const CustomersView: React.FC<CustomersViewProps> = ({
   const [selectedRoute, setSelectedRoute] = useState<string>('ทั้งหมด');
   const [searchQuery, setSearchQuery] = useState<string>('');
   const [bucketCustomer, setBucketCustomer] = useState<CustomerAccount | null>(null);
+  const [pendingStatusChange, setPendingStatusChange] = useState<{
+    customer: CustomerAccount;
+    status: PaymentStatus;
+  } | null>(null);
 
   const filteredCustomers = customers.filter((cust) => {
     const matchesRoute =
@@ -103,16 +115,24 @@ export const CustomersView: React.FC<CustomersViewProps> = ({
   };
 
   const handleStatusToggle = (customerId: string, newStatus: PaymentStatus) => {
+    const cust = customers.find((c) => c.id === customerId);
+    if (!cust) return;
+
     if (newStatus === 'NewAndOld') {
-      const cust = customers.find((c) => c.id === customerId);
-      if (cust) {
-        onOpenNewAndOldModal(cust);
-      }
+      onOpenNewAndOldModal(cust);
       return;
     }
 
-    onUpdateCustomer(customerId, { status: newStatus });
-    onShowToast(`อัปเดตสถานะการชำระเงินเป็น "${newStatus}" เรียบร้อยแล้ว`);
+    setPendingStatusChange({ customer: cust, status: newStatus });
+  };
+
+  const handleConfirmStatusChange = () => {
+    if (!pendingStatusChange) return;
+    const { customer, status } = pendingStatusChange;
+    const label = statusLabels[status];
+    onUpdateCustomer(customer.id, { status });
+    onShowToast(`อัปเดตสถานะการชำระเงินเป็น "${label}" เรียบร้อยแล้ว`);
+    setPendingStatusChange(null);
   };
 
   const handleDelete = (id: string, name: string) => {
@@ -145,6 +165,17 @@ export const CustomersView: React.FC<CustomersViewProps> = ({
         </div>
 
         <div className="flex items-center gap-2 flex-wrap">
+          {canEditPaymentStatusLabels(roleLevel) && (
+            <button
+              onClick={onOpenStatusLabelsModal}
+              className="flex items-center gap-1.5 px-3 py-2 bg-[#F1F5F9] hover:bg-[#E2E8F0] text-[#1E3A5F] rounded-xl text-xs font-bold transition-all border border-[#CBD5E1] cursor-pointer"
+              title="แก้ไขป้ายชื่อสถานะการชำระเงิน (แอดมิน/ฝ่ายบัญชี)"
+            >
+              <span className="material-symbols-outlined text-sm text-[#0284C7]">edit_note</span>
+              แก้ไขป้ายสถานะ
+            </button>
+          )}
+
           <button
             onClick={onOpenRouteManager}
             className="flex items-center gap-1.5 px-3 py-2 bg-[#F1F5F9] hover:bg-[#E2E8F0] text-[#1E3A5F] rounded-xl text-xs font-bold transition-all border border-[#CBD5E1] cursor-pointer"
@@ -390,7 +421,7 @@ export const CustomersView: React.FC<CustomersViewProps> = ({
                           : 'border border-[#0284C7] text-[#0284C7] hover:bg-[#0284C7]/10'
                       }`}
                     >
-                      เงินสด
+                      {statusLabels.Cash}
                     </button>
 
                     <button
@@ -402,7 +433,7 @@ export const CustomersView: React.FC<CustomersViewProps> = ({
                           : 'border border-[#DC2626] text-[#DC2626] hover:bg-[#DC2626]/10'
                       }`}
                     >
-                      ค้าง
+                      {statusLabels.Debt}
                     </button>
 
                     <button
@@ -414,7 +445,7 @@ export const CustomersView: React.FC<CustomersViewProps> = ({
                           : 'border border-[#475569] text-[#475569] hover:bg-[#475569]/10'
                       }`}
                     >
-                      เครดิต
+                      {statusLabels.Credit}
                     </button>
 
                     <button
@@ -426,7 +457,7 @@ export const CustomersView: React.FC<CustomersViewProps> = ({
                           : 'border border-[#D97706] text-[#D97706] hover:bg-[#D97706]/10'
                       }`}
                     >
-                      จ่ายเก่า
+                      {statusLabels.OldPayment}
                     </button>
 
                     <button
@@ -438,7 +469,7 @@ export const CustomersView: React.FC<CustomersViewProps> = ({
                           : 'border border-[#B45309] text-[#B45309] hover:bg-[#FEF3C7]'
                       }`}
                     >
-                      จ่ายใหม่+เก่า
+                      {statusLabels.NewAndOld}
                     </button>
                   </div>
                 </div>
@@ -475,6 +506,16 @@ export const CustomersView: React.FC<CustomersViewProps> = ({
         customer={bucketCustomer}
         onUpdateCustomer={onUpdateCustomer}
         onShowToast={onShowToast}
+      />
+
+      {/* Confirm Payment Status Change Modal */}
+      <ConfirmStatusModal
+        isOpen={!!pendingStatusChange}
+        customer={pendingStatusChange?.customer || null}
+        status={pendingStatusChange?.status || null}
+        statusLabel={pendingStatusChange ? statusLabels[pendingStatusChange.status] : ''}
+        onConfirm={handleConfirmStatusChange}
+        onCancel={() => setPendingStatusChange(null)}
       />
     </div>
   );

@@ -2,6 +2,7 @@ export type TabType =
   | 'operations'
   | 'customers'
   | 'customerDetails'
+  | 'creditCustomers'
   | 'warehouse'
   | 'summary'
   | 'expenses'
@@ -56,6 +57,10 @@ export interface VehicleLogEntry {
 
 export type PaymentStatus = 'Cash' | 'Debt' | 'Credit' | 'OldPayment' | 'NewAndOld';
 
+export type PaymentStatusLabels = Record<PaymentStatus, string>;
+
+export type CreditTermDays = 5 | 7 | 10 | 15 | 'monthly';
+
 export interface PaymentStatusDetails {
   status: PaymentStatus;
   newAmountPaid?: number;
@@ -109,6 +114,7 @@ export interface CustomerAccount {
   lastUpdated?: string;
   customPrices?: Partial<Record<string, number>>;
   accumulatedDebt?: number; // ยอดค้างชำระสะสมเดิม
+  creditTermDays?: CreditTermDays; // เงื่อนไขวันครบกำหนดชำระสำหรับลูกค้าเครดิต
   iceBuckets?: IceBucketHolding[]; // ถังน้ำแข็งประจำร้าน
   paymentHistory?: {
     id: string;

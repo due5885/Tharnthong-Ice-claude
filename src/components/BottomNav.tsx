@@ -13,6 +13,7 @@ export const BottomNav: React.FC<BottomNavProps> = ({ activeTab, onTabChange, ro
     { id: 'operations', label: 'ขึ้น-เหลือน้ำแข็ง', icon: 'inventory_2' },
     { id: 'customers', label: 'ลงบัญชี', icon: 'group' },
     { id: 'customerDetails', label: 'รายละเอียด', icon: 'badge' },
+    { id: 'creditCustomers', label: 'เครดิต', icon: 'event_repeat' },
     { id: 'warehouse', label: 'โกดัง', icon: 'warehouse' },
     { id: 'summary', label: 'สรุป', icon: 'analytics' },
     { id: 'reconciliation', label: 'กระทบยอด', icon: 'fact_check' },

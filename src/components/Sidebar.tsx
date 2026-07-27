@@ -102,6 +102,26 @@ export const Sidebar: React.FC<SidebarProps> = ({
           </button>
         )}
 
+        {can('creditCustomers') && (
+          <button
+            onClick={() => onTabChange('creditCustomers')}
+            className={`w-full text-left rounded-full px-4 py-3 flex items-center gap-4 transition-colors font-medium text-sm cursor-pointer ${
+              activeTab === 'creditCustomers'
+                ? 'bg-[#1E3A5F] text-white shadow-xs'
+                : 'text-[#1E293B] hover:bg-[#DCE7F0]'
+            }`}
+          >
+            <span
+              className={`material-symbols-outlined ${
+                activeTab === 'creditCustomers' ? 'fill-1' : ''
+              }`}
+            >
+              event_repeat
+            </span>
+            <span>ลูกค้าเครดิต</span>
+          </button>
+        )}
+
         {can('warehouse') && (
           <button
             onClick={() => onTabChange('warehouse')}
