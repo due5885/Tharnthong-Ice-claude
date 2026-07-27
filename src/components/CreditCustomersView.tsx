@@ -1,19 +1,28 @@
 import React from 'react';
-import { CreditTermDays, CustomerAccount } from '../types';
+import { CreditTermDays, CustomerAccount, DeliveryRecord } from '../types';
 
 interface CreditCustomersViewProps {
   customers: CustomerAccount[];
+  deliveries: DeliveryRecord[];
   onUpdateCustomer: (id: string, updated: Partial<CustomerAccount>) => void;
   onShowToast: (msg: string) => void;
   selectedDate: string;
   onDateChange: (date: string) => void;
 }
 
-const CREDIT_TERM_OPTIONS: CreditTermDays[] = [5, 7, 10, 15, 'monthly'];
-
-function baseDateFor(customer: CustomerAccount, selectedDate: string): string {
-  return customer.lastUpdated ? customer.lastUpdated.slice(0, 10) : selectedDate;
+interface CreditBillRow {
+  id: string;
+  date: string;
+  totalAmount: number;
+  summaryText: string;
 }
+
+interface CreditCustomerGroup {
+  customer: CustomerAccount;
+  bills: CreditBillRow[];
+}
+
+const CREDIT_TERM_OPTIONS: CreditTermDays[] = [5, 7, 10, 15, 'monthly'];
 
 function computeDueDate(baseDate: string, term?: CreditTermDays): Date | null {
   if (!term) return null;
@@ -49,14 +58,67 @@ function downloadCsv(rows: string[][], filename: string) {
   URL.revokeObjectURL(url);
 }
 
+function buildCreditGroups(
+  customers: CustomerAccount[],
+  deliveries: DeliveryRecord[],
+  selectedDate: string
+): CreditCustomerGroup[] {
+  const creditBills = deliveries.filter((d) => d.status === 'Credit');
+  const groups: CreditCustomerGroup[] = [];
+
+  const findCustomer = (bill: DeliveryRecord): CustomerAccount | undefined =>
+    (bill.customerId && customers.find((c) => c.id === bill.customerId)) ||
+    customers.find((c) => c.name === bill.customerName);
+
+  creditBills.forEach((bill) => {
+    const customer = findCustomer(bill);
+    if (!customer) return; // customer no longer exists (deleted) — skip
+
+    let group = groups.find((g) => g.customer.id === customer.id);
+    if (!group) {
+      group = { customer, bills: [] };
+      groups.push(group);
+    }
+    group.bills.push({
+      id: bill.id,
+      date: bill.date,
+      totalAmount: bill.totalAmount,
+      summaryText: bill.summaryText,
+    });
+  });
+
+  // Fallback: customers whose current ledger row is "Credit" but have no matching dated bill yet
+  // (e.g. status set outside the normal confirm flow) — still show them so nothing silently disappears.
+  customers.forEach((customer) => {
+    if (customer.status !== 'Credit') return;
+    if (groups.some((g) => g.customer.id === customer.id)) return;
+    groups.push({
+      customer,
+      bills: [
+        {
+          id: `fallback-${customer.id}`,
+          date: customer.lastUpdated ? customer.lastUpdated.slice(0, 10) : selectedDate,
+          totalAmount: customer.totalAmount,
+          summaryText: '',
+        },
+      ],
+    });
+  });
+
+  groups.forEach((g) => g.bills.sort((a, b) => (a.date < b.date ? 1 : -1)));
+  groups.sort((a, b) => a.customer.name.localeCompare(b.customer.name, 'th'));
+  return groups;
+}
+
 export const CreditCustomersView: React.FC<CreditCustomersViewProps> = ({
   customers,
+  deliveries,
   onUpdateCustomer,
   onShowToast,
   selectedDate,
   onDateChange,
 }) => {
-  const creditCustomers = customers.filter((c) => c.status === 'Credit');
+  const groups = buildCreditGroups(customers, deliveries, selectedDate);
 
   const handleTermChange = (customer: CustomerAccount, value: string) => {
     const term: CreditTermDays = value === 'monthly' ? 'monthly' : (Number(value) as CreditTermDays);
@@ -65,34 +127,41 @@ export const CreditCustomersView: React.FC<CreditCustomersViewProps> = ({
   };
 
   const handleExportCsv = () => {
-    const header = ['รหัส', 'ชื่อลูกค้า', 'สายส่ง', 'ยอดค้างชำระ', 'เงื่อนไขเครดิต', 'วันครบกำหนดชำระ'];
-    const rows = creditCustomers.map((c) => {
-      const due = computeDueDate(baseDateFor(c, selectedDate), c.creditTermDays);
-      return [
-        c.code,
-        c.name,
-        c.route,
-        c.totalAmount.toString(),
-        termLabel(c.creditTermDays),
-        due ? formatThaiDate(due) : '-',
-      ];
+    const header = ['รหัส', 'ชื่อลูกค้า', 'สายส่ง', 'วันที่ลงบิล', 'ยอดบิล', 'เงื่อนไขเครดิต', 'วันครบกำหนดชำระ'];
+    const rows: string[][] = [];
+    groups.forEach(({ customer, bills }) => {
+      bills.forEach((bill) => {
+        const due = computeDueDate(bill.date, customer.creditTermDays);
+        rows.push([
+          customer.code,
+          customer.name,
+          customer.route,
+          bill.date,
+          bill.totalAmount.toString(),
+          termLabel(customer.creditTermDays),
+          due ? formatThaiDate(due) : '-',
+        ]);
+      });
     });
     downloadCsv([header, ...rows], `ลูกค้าเครดิต-${selectedDate}.csv`);
     onShowToast('ดาวน์โหลดไฟล์รายชื่อลูกค้าเครดิตเรียบร้อยแล้ว');
   };
 
   const handleCopyText = async () => {
-    const lines = [
-      `รายชื่อลูกค้าเครดิต ณ วันที่ ${selectedDate}`,
-      '',
-      ...creditCustomers.map((c) => {
-        const due = computeDueDate(baseDateFor(c, selectedDate), c.creditTermDays);
-        return `• ${c.name} (${c.route}) ยอด ฿${c.totalAmount.toLocaleString()} — เงื่อนไข ${termLabel(
-          c.creditTermDays
-        )}${due ? ` — ครบกำหนด ${formatThaiDate(due)}` : ''}`;
-      }),
-    ];
+    const lines = [`รายชื่อลูกค้าเครดิต ณ วันที่ ${selectedDate}`, ''];
+    groups.forEach(({ customer, bills }) => {
+      lines.push(`• ${customer.name} (${customer.route}) — เงื่อนไข ${termLabel(customer.creditTermDays)}`);
+      bills.forEach((bill) => {
+        const due = computeDueDate(bill.date, customer.creditTermDays);
+        lines.push(
+          `   - วันที่ ${bill.date} ยอด ฿${bill.totalAmount.toLocaleString()}${
+            due ? ` — ครบกำหนด ${formatThaiDate(due)}` : ''
+          }`
+        );
+      });
+    });
     const text = lines.join('\n');
+
     try {
       await navigator.clipboard.writeText(text);
       onShowToast('คัดลอกข้อความแล้ว นำไปวางส่งทาง LINE ได้เลย');
@@ -141,7 +210,7 @@ export const CreditCustomersView: React.FC<CreditCustomersViewProps> = ({
         <div className="flex items-center gap-2 flex-wrap">
           <button
             onClick={handleExportCsv}
-            disabled={creditCustomers.length === 0}
+            disabled={groups.length === 0}
             className="flex items-center gap-1.5 px-3 py-2 bg-[#F1F5F9] hover:bg-[#E2E8F0] text-[#1E3A5F] rounded-xl text-xs font-bold transition-all border border-[#CBD5E1] cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed"
           >
             <span className="material-symbols-outlined text-sm text-[#0284C7]">download</span>
@@ -150,7 +219,7 @@ export const CreditCustomersView: React.FC<CreditCustomersViewProps> = ({
 
           <button
             onClick={handleCopyText}
-            disabled={creditCustomers.length === 0}
+            disabled={groups.length === 0}
             className="flex items-center gap-1.5 px-3 py-2 bg-[#F1F5F9] hover:bg-[#E2E8F0] text-[#1E3A5F] rounded-xl text-xs font-bold transition-all border border-[#CBD5E1] cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed"
           >
             <span className="material-symbols-outlined text-sm text-[#0284C7]">content_copy</span>
@@ -160,38 +229,42 @@ export const CreditCustomersView: React.FC<CreditCustomersViewProps> = ({
       </div>
 
       <div className="space-y-3">
-        {creditCustomers.length === 0 ? (
+        {groups.length === 0 ? (
           <div className="bg-white p-8 rounded-2xl border border-[#D2E0EB] text-center text-[#64748B] font-medium text-sm">
             ยังไม่มีลูกค้าที่ลงบัญชีเป็น "เครดิต" ในระบบ — พอลูกน้องลงบัญชีลูกค้าเป็นเครดิตในหน้า "ลงบัญชีลูกค้า" รายชื่อจะขึ้นที่นี่อัตโนมัติ
           </div>
         ) : (
-          creditCustomers.map((customer) => {
-            const dueDate = computeDueDate(baseDateFor(customer, selectedDate), customer.creditTermDays);
-            const isOverdue = dueDate ? dueDate.getTime() < new Date().setHours(0, 0, 0, 0) : false;
+          groups.map(({ customer, bills }) => {
+            const groupTotal = bills.reduce((sum, b) => sum + b.totalAmount, 0);
+            const dueDates = bills.map((b) => computeDueDate(b.date, customer.creditTermDays)).filter(Boolean) as Date[];
+            const isOverdue = dueDates.some((d) => d.getTime() < new Date().setHours(0, 0, 0, 0));
 
             return (
               <div
                 key={customer.id}
-                className="bg-white rounded-2xl p-4 border border-[#D2E0EB] hover:border-[#0284C7] shadow-xs transition-all flex flex-col md:flex-row md:items-center justify-between gap-3"
+                className="bg-white rounded-2xl p-4 border border-[#D2E0EB] hover:border-[#0284C7] shadow-xs transition-all space-y-3"
               >
-                <div>
-                  <div className="flex items-center gap-2 flex-wrap">
-                    <span className="font-bold text-base text-[#1E3A5F]">{customer.name}</span>
-                    {isOverdue && (
-                      <span className="text-[10px] font-bold bg-[#FEE2E2] text-[#DC2626] border border-[#FECACA] px-2 py-0.5 rounded-full">
-                        เกินกำหนดชำระ
+                <div className="flex flex-col md:flex-row md:items-center justify-between gap-3 pb-2 border-b border-[#F1F5F9]">
+                  <div>
+                    <div className="flex items-center gap-2 flex-wrap">
+                      <span className="font-bold text-base text-[#1E3A5F]">{customer.name}</span>
+                      {isOverdue && (
+                        <span className="text-[10px] font-bold bg-[#FEE2E2] text-[#DC2626] border border-[#FECACA] px-2 py-0.5 rounded-full">
+                          เกินกำหนดชำระ
+                        </span>
+                      )}
+                      <span className="text-[10px] font-bold bg-[#F1F5F9] text-[#64748B] border border-[#E2E8F0] px-2 py-0.5 rounded-full">
+                        {bills.length} บิลค้าง
                       </span>
-                    )}
+                    </div>
+                    <span className="text-xs text-[#64748B] font-medium">
+                      สายส่ง: {customer.route} • รหัส {customer.code}
+                    </span>
+                    <div className="mt-1 font-bold text-lg text-[#0284C7] data-mono">
+                      รวม ฿ {groupTotal.toLocaleString()}
+                    </div>
                   </div>
-                  <span className="text-xs text-[#64748B] font-medium">
-                    สายส่ง: {customer.route} • รหัส {customer.code}
-                  </span>
-                  <div className="mt-1 font-bold text-lg text-[#0284C7] data-mono">
-                    ฿ {customer.totalAmount.toLocaleString()}
-                  </div>
-                </div>
 
-                <div className="flex items-center gap-3 flex-wrap">
                   <div className="flex flex-col gap-1">
                     <span className="text-[11px] font-bold text-[#64748B] uppercase">เงื่อนไขเครดิต</span>
                     <select
@@ -209,17 +282,36 @@ export const CreditCustomersView: React.FC<CreditCustomersViewProps> = ({
                       ))}
                     </select>
                   </div>
+                </div>
 
-                  <div className="flex flex-col gap-1">
-                    <span className="text-[11px] font-bold text-[#64748B] uppercase">ครบกำหนดชำระ</span>
-                    <span
-                      className={`px-3 py-1.5 rounded-xl text-xs font-bold ${
-                        isOverdue ? 'bg-[#FEE2E2] text-[#DC2626]' : 'bg-[#F1F5F9] text-[#1E3A5F]'
-                      }`}
-                    >
-                      {dueDate ? formatThaiDate(dueDate) : 'ยังไม่กำหนด'}
-                    </span>
-                  </div>
+                <div className="space-y-1.5">
+                  {bills.map((bill) => {
+                    const due = computeDueDate(bill.date, customer.creditTermDays);
+                    const billOverdue = due ? due.getTime() < new Date().setHours(0, 0, 0, 0) : false;
+                    return (
+                      <div
+                        key={bill.id}
+                        className="flex flex-col sm:flex-row sm:items-center justify-between gap-1.5 p-2.5 bg-[#F8FAFC] border border-[#E2E8F0] rounded-xl text-xs"
+                      >
+                        <div className="flex items-center gap-2 flex-wrap">
+                          <span className="font-bold text-[#1E3A5F] data-mono">{bill.date}</span>
+                          {bill.summaryText && <span className="text-[#64748B]">{bill.summaryText}</span>}
+                        </div>
+                        <div className="flex items-center gap-3 flex-wrap">
+                          <span className="font-bold text-[#0284C7] data-mono">
+                            ฿ {bill.totalAmount.toLocaleString()}
+                          </span>
+                          <span
+                            className={`px-2 py-0.5 rounded-lg font-bold ${
+                              billOverdue ? 'bg-[#FEE2E2] text-[#DC2626]' : 'bg-[#E0F2FE] text-[#0369A1]'
+                            }`}
+                          >
+                            {due ? `ครบกำหนด ${formatThaiDate(due)}` : 'ยังไม่กำหนดวัน'}
+                          </span>
+                        </div>
+                      </div>
+                    );
+                  })}
                 </div>
               </div>
             );

@@ -10,6 +10,7 @@ import {
   IceQuantity,
   MonthlyFixedExpense,
   OperationSummaryStats,
+  PaymentStatus,
   PaymentStatusDetails,
   PaymentStatusLabels,
   RoleLevel,
@@ -446,11 +447,60 @@ export default function App() {
     }));
   };
 
+  // Build a "โม่(5), หลอดเล็ก(2)" style summary text from a customer's current quantities
+  const buildCustomerSummaryText = (customer: CustomerAccount): string => {
+    const parts: string[] = [];
+    products.forEach((prod) => {
+      const qty = customer.quantities[prod.key] || 0;
+      if (qty > 0) {
+        parts.push(`${prod.labelTh}(${qty})`);
+      }
+    });
+    return parts.join(', ');
+  };
+
+  // Record a dated bill history entry so per-day billing (e.g. credit customers due-date tracking) isn't lost when a customer's current ledger row gets overwritten the next day
+  const recordCustomerBillHistory = (
+    customer: CustomerAccount,
+    status: PaymentStatus,
+    statusDetails?: PaymentStatusDetails
+  ) => {
+    const now = new Date();
+    const hours = String(now.getHours()).padStart(2, '0');
+    const minutes = String(now.getMinutes()).padStart(2, '0');
+    const routeObj = routes.find((r) => r.name === customer.route);
+    const newRecord: DeliveryRecord = {
+      id: `DEL-${Date.now().toString().slice(-4)}`,
+      time: `${hours}:${minutes}`,
+      customerId: customer.id,
+      customerName: customer.name,
+      summaryText: buildCustomerSummaryText(customer),
+      totalAmount: customer.totalAmount,
+      status,
+      statusDetails,
+      date: selectedDate,
+      routeId: routeObj?.id,
+      routeName: customer.route,
+    };
+    setRecentDeliveries((prev) => [newRecord, ...prev]);
+  };
+
+  // Handler: Confirm a payment status change from the Customers screen (Cash/Debt/Credit/OldPayment)
+  const handleConfirmCustomerStatus = (customer: CustomerAccount, status: PaymentStatusDetails['status']) => {
+    setCustomers((prev) =>
+      prev.map((c) =>
+        c.id === customer.id ? { ...c, status, statusDetails: undefined, lastUpdated: selectedDate } : c
+      )
+    );
+    recordCustomerBillHistory(customer, status);
+  };
+
   // Combined Payment Handler (NewAndOld)
   const handleSaveNewAndOldPayment = (
     customerId: string,
     details: PaymentStatusDetails
   ) => {
+    const customer = customers.find((c) => c.id === customerId);
     setCustomers((prev) =>
       prev.map((c) =>
         c.id === customerId
@@ -458,10 +508,14 @@ export default function App() {
               ...c,
               status: 'NewAndOld',
               statusDetails: details,
+              lastUpdated: selectedDate,
             }
           : c
       )
     );
+    if (customer) {
+      recordCustomerBillHistory(customer, 'NewAndOld', details);
+    }
   };
 
   // Admin Handlers
@@ -767,6 +821,7 @@ export default function App() {
             statusLabels={statusLabels}
             roleLevel={roleLevel}
             onUpdateCustomer={handleUpdateCustomer}
+            onConfirmCustomerStatus={handleConfirmCustomerStatus}
             onDeleteCustomer={handleDeleteCustomer}
             onOpenPriceModal={(customer) => setCustomerForPriceModal(customer)}
             onOpenNewAndOldModal={(customer) => setNewAndOldModalCustomer(customer)}
@@ -785,6 +840,7 @@ export default function App() {
         {activeTab === 'creditCustomers' && (
           <CreditCustomersView
             customers={customers}
+            deliveries={recentDeliveries}
             onUpdateCustomer={handleUpdateCustomer}
             onShowToast={showToast}
             selectedDate={selectedDate}

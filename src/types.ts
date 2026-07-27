@@ -83,6 +83,7 @@ export type IceQuantity = Record<string, number>;
 export interface DeliveryRecord {
   id: string;
   time: string;
+  customerId?: string;
   customerName: string;
   summaryText: string;
   totalAmount: number;

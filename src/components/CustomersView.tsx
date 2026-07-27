@@ -11,6 +11,7 @@ interface CustomersViewProps {
   statusLabels: PaymentStatusLabels;
   roleLevel: RoleLevel;
   onUpdateCustomer: (id: string, updated: Partial<CustomerAccount>) => void;
+  onConfirmCustomerStatus: (customer: CustomerAccount, status: PaymentStatus) => void;
   onDeleteCustomer: (id: string) => void;
   onOpenPriceModal: (customer: CustomerAccount) => void;
   onOpenNewAndOldModal: (customer: CustomerAccount) => void;
@@ -32,6 +33,7 @@ export const CustomersView: React.FC<CustomersViewProps> = ({
   statusLabels,
   roleLevel,
   onUpdateCustomer,
+  onConfirmCustomerStatus,
   onDeleteCustomer,
   onOpenPriceModal,
   onOpenNewAndOldModal,
@@ -130,7 +132,7 @@ export const CustomersView: React.FC<CustomersViewProps> = ({
     if (!pendingStatusChange) return;
     const { customer, status } = pendingStatusChange;
     const label = statusLabels[status];
-    onUpdateCustomer(customer.id, { status });
+    onConfirmCustomerStatus(customer, status);
     onShowToast(`อัปเดตสถานะการชำระเงินเป็น "${label}" เรียบร้อยแล้ว`);
     setPendingStatusChange(null);
   };
