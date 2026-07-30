@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
 import { AdminUser } from '../types';
+import { resolveAdminAvatarByName } from '../lib/adminAvatars';
 
 interface LoginViewProps {
   admins: AdminUser[];
@@ -75,15 +76,21 @@ export const LoginView: React.FC<LoginViewProps> = ({ admins, onLoginSuccess }) 
 
         {!selectedAdmin ? (
           <div className="space-y-2 max-h-72 overflow-y-auto no-scrollbar text-left">
-            {admins.map((admin) => (
+            {admins.map((admin) => {
+              const avatarUrl = resolveAdminAvatarByName(admin.name);
+              return (
               <button
                 key={admin.id}
                 type="button"
                 onClick={() => handleSelectAdmin(admin)}
                 className="w-full p-3 rounded-2xl border border-[#D2E0EB] bg-[#F8FAFC] hover:bg-[#E0F2FE] hover:border-[#0284C7] transition-all cursor-pointer flex items-center gap-3"
               >
-                <div className="w-10 h-10 rounded-full bg-[#0284C7] text-white flex items-center justify-center shrink-0">
-                  <span className="material-symbols-outlined text-lg">person</span>
+                <div className="w-10 h-10 rounded-full bg-[#0284C7] text-white flex items-center justify-center shrink-0 overflow-hidden">
+                  {avatarUrl ? (
+                    <img src={avatarUrl} alt={admin.name} className="w-full h-full object-cover" />
+                  ) : (
+                    <span className="material-symbols-outlined text-lg">person</span>
+                  )}
                 </div>
                 <div className="text-left min-w-0">
                   <div className="font-bold text-sm text-[#1E293B] truncate">{admin.name}</div>
@@ -91,7 +98,8 @@ export const LoginView: React.FC<LoginViewProps> = ({ admins, onLoginSuccess }) 
                 </div>
                 <span className="material-symbols-outlined text-[#94A3B8] ml-auto">chevron_right</span>
               </button>
-            ))}
+              );
+            })}
           </div>
         ) : (
           <>

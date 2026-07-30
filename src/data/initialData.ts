@@ -1,6 +1,7 @@
 import {
   CustomerAccount,
   DeliveryRecord,
+  ExpenseCategory,
   ExpenseItem,
   IceProduct,
   MonthlyFixedExpense,
@@ -607,6 +608,39 @@ export const INITIAL_EXPENSES: ExpenseItem[] = [
     status: 'Cash',
     date: '2026-07-23',
   },
+];
+
+// Curated icon set (Material Symbols names) covering common ice-shop expense types —
+// fuel/transport, wages, electricity/water, maintenance, packaging, plus a few extras
+// (rent, phone/internet, vehicle wash, food/meals, tax, misc) for the icon picker.
+export const EXPENSE_ICON_CHOICES: string[] = [
+  'local_gas_station',
+  'badge',
+  'bolt',
+  'water_drop',
+  'build',
+  'package_2',
+  'ac_unit',
+  'home_work',
+  'call',
+  'wifi',
+  'local_car_wash',
+  'receipt_long',
+  'restaurant',
+  'cleaning_services',
+  'shield',
+  'settings',
+  'local_shipping',
+  'payments',
+];
+
+export const INITIAL_EXPENSE_CATEGORIES: ExpenseCategory[] = [
+  { id: 'ECAT-1', key: 'Fuel', labelTh: 'ค่าน้ำมัน', icon: 'local_gas_station' },
+  { id: 'ECAT-2', key: 'Wages', labelTh: 'ค่าแรง', icon: 'badge' },
+  { id: 'ECAT-3', key: 'Utilities', labelTh: 'ค่าน้ำ-ค่าไฟ', icon: 'bolt' },
+  { id: 'ECAT-4', key: 'Maintenance', labelTh: 'ซ่อมบำรุง', icon: 'build' },
+  { id: 'ECAT-5', key: 'Packaging', labelTh: 'บรรจุภัณฑ์', icon: 'package_2' },
+  { id: 'ECAT-6', key: 'Other', labelTh: 'อื่นๆ', icon: 'payments' },
 ];
 
 export const INITIAL_WAREHOUSE_ITEMS: WarehouseItem[] = [

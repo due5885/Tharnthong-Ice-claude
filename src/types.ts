@@ -9,7 +9,8 @@ export type TabType =
   | 'assistant'
   | 'reconciliation'
   | 'attendance'
-  | 'vehicles';
+  | 'vehicles'
+  | 'sublineCash';
 
 export type AssistantPersonaId = 'deniz' | 'nueng' | 'snow';
 
@@ -18,6 +19,8 @@ export interface ChatMessage {
   role: 'user' | 'model';
   text: string;
   timestamp: string;
+  date: string; // YYYY-MM-DD, the day this was actually sent (for daily activity logs)
+  askedBy?: string; // admin name who sent this (role === 'user' messages only)
 }
 
 export interface Employee {
@@ -34,6 +37,15 @@ export interface AttendanceRecord {
   date: string;
   checkIn?: string;
   checkOut?: string;
+  note?: string;
+}
+
+export interface EmployeeLoan {
+  id: string;
+  employeeId: string;
+  employeeName: string;
+  date: string;
+  amount: number;
   note?: string;
 }
 
@@ -93,6 +105,8 @@ export interface DeliveryRecord {
   routeId?: string;
   routeName?: string;
   timeRound?: string;
+  paymentMethod?: 'Cash' | 'Transfer';
+  note?: string;
 }
 
 export interface IceBucketHolding {
@@ -106,6 +120,7 @@ export interface CustomerAccount {
   id: string;
   code: string;
   name: string;
+  phone?: string;
   route: string;
   quantities: IceQuantity;
   extraAmount: number; // เศษเงิน
@@ -116,13 +131,16 @@ export interface CustomerAccount {
   customPrices?: Partial<Record<string, number>>;
   accumulatedDebt?: number; // ยอดค้างชำระสะสมเดิม
   creditTermDays?: CreditTermDays; // เงื่อนไขวันครบกำหนดชำระสำหรับลูกค้าเครดิต
+  creditPaid?: number; // ยอดที่ลูกค้าเครดิตจ่ายมาแบบยอดกลมๆ ไม่ตรงงวด (หักออกจากยอดบิลเครดิตรวม)
+  creditSettledPeriods?: string[]; // งวดเครดิตที่ตัดจ่ายเต็มจำนวนแล้ว เก็บเป็น "startISO_endISO"
   iceBuckets?: IceBucketHolding[]; // ถังน้ำแข็งประจำร้าน
   paymentHistory?: {
     id: string;
     date: string;
     amountPaid: number;
     debtRemaining: number;
-    type: 'DAILY_BILL' | 'DEBT_SETTLEMENT';
+    type: 'DAILY_BILL' | 'DEBT_SETTLEMENT' | 'CREDIT_SETTLEMENT';
+    method?: 'Cash' | 'Transfer' | 'OldDebt';
     note?: string;
   }[];
 }
@@ -130,7 +148,7 @@ export interface CustomerAccount {
 export interface WarehouseItem {
   id: string;
   name: string;
-  category: 'น้ำแข็งสำเร็จรูป/ห้องเย็น' | 'ถุง/บรรจุภัณฑ์' | 'ถังน้ำแข็งเปล่า' | 'วัสดุ/อื่นๆ';
+  category: string;
   quantity: number;
   unit: string;
   minThreshold: number;
@@ -149,7 +167,7 @@ export interface WarehouseLog {
   notes?: string;
 }
 
-export type RouteType = 'storefront' | 'mobile';
+export type RouteType = 'storefront' | 'mobile' | 'subline';
 
 export interface RouteItem {
   id: string;
@@ -189,13 +207,20 @@ export interface ExpenseItem {
   id: string;
   time: string;
   route?: string;
-  category: 'Fuel' | 'Wages' | 'Utilities' | 'Maintenance' | 'Packaging' | 'Other';
+  category: string; // references ExpenseCategory.key
   categoryTh: string;
   icon: string;
   description: string;
   amount: number;
   status: 'Cash' | 'Debt';
   date: string;
+}
+
+export interface ExpenseCategory {
+  id: string;
+  key: string;
+  labelTh: string;
+  icon: string;
 }
 
 export interface MonthlyFixedExpense {

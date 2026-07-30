@@ -4,7 +4,10 @@ import {
   MonthlyFixedExpense,
   OperationSummaryStats,
   DeliveryRecord,
+  RouteItem,
   SummaryOperationsData,
+  TruckStockRecord,
+  WarehouseLog,
 } from '../types';
 
 interface BuildContextArgs {
@@ -16,6 +19,9 @@ interface BuildContextArgs {
   monthlyExpenses: MonthlyFixedExpense[];
   recentDeliveries: DeliveryRecord[];
   icePurchaseCost: number;
+  routes: RouteItem[];
+  truckRecords: TruckStockRecord[];
+  warehouseLogs: WarehouseLog[];
 }
 
 export function buildBusinessContext({
@@ -27,6 +33,9 @@ export function buildBusinessContext({
   monthlyExpenses,
   recentDeliveries,
   icePurchaseCost,
+  routes,
+  truckRecords,
+  warehouseLogs,
 }: BuildContextArgs): string {
   const todaysExpenses = expenses.filter((e) => e.date === selectedDate);
   const totalTodayExpense = todaysExpenses.reduce((sum, e) => sum + e.amount, 0);
@@ -108,6 +117,34 @@ export function buildBusinessContext({
       lines.push(`- ${d.time} ${d.customerName}: ${d.summaryText} รวม ${d.totalAmount.toLocaleString()} บาท (${d.status})`);
     });
   }
+
+  // Completeness signals — lets Snow flag what looks unlogged for the day, not just report numbers
+  const routesWithDeliveryToday = new Set(
+    todaysDeliveries.map((d) => d.routeName).filter((r): r is string => !!r)
+  );
+  const routesMissingToday = routes.filter((r) => !routesWithDeliveryToday.has(r.name));
+
+  const todaysTruckRecords = truckRecords.filter((t) => t.date === selectedDate);
+  const todaysWarehouseLogs = warehouseLogs.filter((w) => w.date === selectedDate);
+
+  lines.push('');
+  lines.push('== ตรวจสอบความครบถ้วนของการลงบัญชีวันนี้ ==');
+  lines.push(`- ทั้งหมดมี ${routes.length} สายส่ง: ${routes.map((r) => r.name).join(', ') || '-'}`);
+  if (routesMissingToday.length === 0) {
+    lines.push('- ทุกสายส่งมีรายการบันทึกไว้แล้ววันนี้');
+  } else {
+    lines.push(`- สายส่งที่ยังไม่มีรายการบันทึกวันนี้เลย: ${routesMissingToday.map((r) => r.name).join(', ')}`);
+  }
+  lines.push(
+    `- ใบบันทึกขึ้นน้ำแข็งบนรถ/ตรวจนับเหลือกลับวันนี้: ${
+      todaysTruckRecords.length === 0 ? 'ยังไม่มีการบันทึกเลย' : `บันทึกแล้ว ${todaysTruckRecords.length} รอบ`
+    }`
+  );
+  lines.push(
+    `- บันทึกเข้า-ออกสต็อกโกดังวันนี้: ${
+      todaysWarehouseLogs.length === 0 ? 'ยังไม่มีการบันทึกเลย' : `บันทึกแล้ว ${todaysWarehouseLogs.length} รายการ`
+    }`
+  );
 
   return lines.join('\n');
 }

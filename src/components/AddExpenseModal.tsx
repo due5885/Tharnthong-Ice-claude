@@ -1,10 +1,11 @@
 import React, { useState } from 'react';
-import { ExpenseItem, RouteItem } from '../types';
+import { ExpenseCategory, ExpenseItem, RouteItem } from '../types';
 
 interface AddExpenseModalProps {
   isOpen: boolean;
   onClose: () => void;
   routes?: RouteItem[];
+  categories: ExpenseCategory[];
   onAddExpense: (expense: Omit<ExpenseItem, 'id'>) => void;
   onShowToast: (msg: string) => void;
 }
@@ -13,34 +14,17 @@ export const AddExpenseModal: React.FC<AddExpenseModalProps> = ({
   isOpen,
   onClose,
   routes = [],
+  categories,
   onAddExpense,
   onShowToast,
 }) => {
   const [selectedRoute, setSelectedRoute] = useState<string>('หน้าร้าน / ส่วนกลาง');
-  const [category, setCategory] = useState<ExpenseItem['category']>('Fuel');
+  const [categoryKey, setCategoryKey] = useState<string>(categories[0]?.key || '');
   const [description, setDescription] = useState('');
   const [amount, setAmount] = useState('');
   const [status, setStatus] = useState<'Cash' | 'Debt'>('Cash');
 
   if (!isOpen) return null;
-
-  const getCategoryDetails = (cat: ExpenseItem['category']) => {
-    switch (cat) {
-      case 'Fuel':
-        return { categoryTh: 'ค่าน้ำมัน', icon: 'local_gas_station' };
-      case 'Wages':
-        return { categoryTh: 'ค่าแรง', icon: 'badge' };
-      case 'Utilities':
-        return { categoryTh: 'ค่าน้ำ-ค่าไฟ', icon: 'bolt' };
-      case 'Maintenance':
-        return { categoryTh: 'ซ่อมบำรุง', icon: 'build' };
-      case 'Packaging':
-        return { categoryTh: 'บรรจุภัณฑ์', icon: 'package' };
-      case 'Other':
-      default:
-        return { categoryTh: 'อื่นๆ', icon: 'payments' };
-    }
-  };
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
@@ -55,7 +39,9 @@ export const AddExpenseModal: React.FC<AddExpenseModalProps> = ({
       return;
     }
 
-    const { categoryTh, icon } = getCategoryDetails(category);
+    const selectedCategory = categories.find((c) => c.key === categoryKey) || categories[0];
+    const categoryTh = selectedCategory?.labelTh || 'อื่นๆ';
+    const icon = selectedCategory?.icon || 'payments';
 
     const now = new Date();
     const hours = now.getHours();
@@ -67,7 +53,7 @@ export const AddExpenseModal: React.FC<AddExpenseModalProps> = ({
     onAddExpense({
       time: timeStr,
       route: selectedRoute,
-      category,
+      category: categoryKey,
       categoryTh,
       icon,
       description: description.trim(),
@@ -122,16 +108,15 @@ export const AddExpenseModal: React.FC<AddExpenseModalProps> = ({
               หมวดหมู่รายจ่าย
             </label>
             <select
-              value={category}
-              onChange={(e) => setCategory(e.target.value as ExpenseItem['category'])}
+              value={categoryKey}
+              onChange={(e) => setCategoryKey(e.target.value)}
               className="w-full py-2.5 px-3 rounded-xl border border-[#E5E5DF] bg-white text-sm font-medium focus:ring-2 focus:ring-[#5A5A40] text-[#2C2C24]"
             >
-              <option value="Fuel">ค่าน้ำมัน (Fuel)</option>
-              <option value="Wages">ค่าแรงพนักงาน (Wages)</option>
-              <option value="Utilities">ค่าน้ำ-ค่าไฟ (Utilities)</option>
-              <option value="Maintenance">ซ่อมบำรุงเครื่องจักร/รถ (Maintenance)</option>
-              <option value="Packaging">ถุงและบรรจุภัณฑ์ (Packaging)</option>
-              <option value="Other">อื่นๆ (Other)</option>
+              {categories.map((cat) => (
+                <option key={cat.id} value={cat.key}>
+                  {cat.labelTh}
+                </option>
+              ))}
             </select>
           </div>
 

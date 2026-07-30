@@ -2,6 +2,8 @@ import React from 'react';
 import { DeliveryRecord, IceProduct, RouteItem, TruckStockRecord } from '../types';
 import { buildRouteReconciliations } from '../lib/reconciliation';
 import { useHorizontalWheelScroll } from '../lib/useHorizontalWheelScroll';
+import { formatShortDate } from '../lib/statementExport';
+import { DateInput } from './DateInput';
 
 interface CashReconciliationViewProps {
   selectedDate: string;
@@ -60,11 +62,10 @@ export const CashReconciliationView: React.FC<CashReconciliationViewProps> = ({
           <div className="flex items-center gap-2 bg-[#F8FAFC] border border-[#CBD5E1] px-3 py-1.5 rounded-xl">
             <span className="material-symbols-outlined text-sm text-[#0284C7]">calendar_today</span>
             <span className="text-xs font-bold text-[#1E3A5F]">เลือกวัน:</span>
-            <input
-              type="date"
+            <DateInput
               value={selectedDate}
-              onChange={(e) => onDateChange(e.target.value)}
-              className="bg-transparent text-xs font-bold text-[#0284C7] data-mono outline-none cursor-pointer"
+              onChange={onDateChange}
+              className="bg-transparent text-xs font-bold text-[#0284C7] data-mono outline-none cursor-pointer w-24"
             />
           </div>
         </div>
@@ -74,7 +75,7 @@ export const CashReconciliationView: React.FC<CashReconciliationViewProps> = ({
       <section className="bg-white rounded-2xl border border-[#D2E0EB] shadow-xs overflow-hidden">
         {rows.length === 0 ? (
           <div className="p-10 text-center text-[#64748B] text-sm">
-            ยังไม่มีข้อมูลขึ้นน้ำแข็งบนรถ (Truck Stock) สำหรับวันที่ {selectedDate}
+            ยังไม่มีข้อมูลขึ้นน้ำแข็งบนรถ (Truck Stock) สำหรับวันที่ {formatShortDate(selectedDate)}
           </div>
         ) : (
           <div ref={tableScrollRef} className="overflow-x-auto thin-scrollbar">

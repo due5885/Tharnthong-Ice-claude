@@ -4,6 +4,7 @@ export const TAB_PERMISSIONS: Record<RoleLevel, TabType[]> = {
   owner: [
     'operations',
     'customers',
+    'sublineCash',
     'customerDetails',
     'creditCustomers',
     'warehouse',
@@ -17,16 +18,18 @@ export const TAB_PERMISSIONS: Record<RoleLevel, TabType[]> = {
   accountant: [
     'operations',
     'customers',
+    'sublineCash',
     'customerDetails',
     'creditCustomers',
     'warehouse',
+    'summary',
     'reconciliation',
     'expenses',
     'assistant',
     'attendance',
     'vehicles',
   ],
-  staff: ['operations', 'warehouse'],
+  staff: ['operations', 'warehouse', 'summary'],
 };
 
 export function canAccessTab(roleLevel: RoleLevel, tab: TabType): boolean {
@@ -39,4 +42,8 @@ export function canManageAdmins(roleLevel: RoleLevel): boolean {
 
 export function canEditPaymentStatusLabels(roleLevel: RoleLevel): boolean {
   return roleLevel === 'owner' || roleLevel === 'accountant';
+}
+
+export function canViewNetProfit(roleLevel: RoleLevel): boolean {
+  return roleLevel === 'owner';
 }

@@ -173,7 +173,7 @@ export const OperationsView: React.FC<OperationsViewProps> = ({
     : deliveriesToDisplayList.slice(0, 5);
 
   return (
-    <div className="space-y-6 pb-20">
+    <div className="space-y-6 pb-24">
       {roleLevel !== 'staff' && (
         <div className="flex justify-end">
           <button

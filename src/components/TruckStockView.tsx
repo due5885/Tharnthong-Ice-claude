@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
 import { IceProduct, IceQuantity, RouteItem, TruckStockRecord } from '../types';
+import { formatShortDate } from '../lib/statementExport';
 
 interface TruckStockViewProps {
   selectedDate: string;
@@ -457,7 +458,7 @@ export const TruckStockView: React.FC<TruckStockViewProps> = ({
         <div className="bg-white rounded-2xl border border-[#CBD5E1] p-4 space-y-3">
           <h4 className="font-bold text-sm text-[#1E3A5F] flex items-center gap-2">
             <span className="material-symbols-outlined text-[#0284C7]">history</span>
-            ประวัติการขึ้น-เหลือกลับ ประจำวันที่ {selectedDate} ({filteredRecords.length} รายการ)
+            ประวัติการขึ้น-เหลือกลับ ประจำวันที่ {formatShortDate(selectedDate)} ({filteredRecords.length} รายการ)
           </h4>
 
           <div className="space-y-2">

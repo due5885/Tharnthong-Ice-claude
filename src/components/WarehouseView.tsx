@@ -1,6 +1,8 @@
 import React, { useState } from 'react';
 import { WarehouseItem, WarehouseLog } from '../types';
 import { useHorizontalWheelScroll } from '../lib/useHorizontalWheelScroll';
+import { formatShortDate, formatTimestampDMY } from '../lib/statementExport';
+import { DateInput } from './DateInput';
 
 interface WarehouseViewProps {
   items: WarehouseItem[];
@@ -15,8 +17,15 @@ interface WarehouseViewProps {
 const CATEGORIES = [
   'ทั้งหมด',
   'ถังน้ำแข็งเปล่า',
+  'กระสอบ',
   'เคมี/อุปกรณ์บำรุงรักษา',
 ];
+
+const CATEGORY_ICONS: Record<string, string> = {
+  'ถังน้ำแข็งเปล่า': 'inventory_2',
+  'กระสอบ': 'inventory',
+  'เคมี/อุปกรณ์บำรุงรักษา': 'construction',
+};
 
 export const WarehouseView: React.FC<WarehouseViewProps> = ({
   items,
@@ -29,8 +38,9 @@ export const WarehouseView: React.FC<WarehouseViewProps> = ({
 }) => {
   const [activeTab, setActiveTab] = useState<'ITEMS' | 'LOGS'>('ITEMS');
   const tableScrollRef = useHorizontalWheelScroll<HTMLDivElement>();
-  const [selectedCategory, setSelectedCategory] = useState('ทั้งหมด');
   const [searchQuery, setSearchQuery] = useState('');
+  // Drill-down: null = show category cards, set = show that category's item list
+  const [drilldownCategory, setDrilldownCategory] = useState<string | null>(null);
 
   // Add/Edit Item Modal
   const [isItemModalOpen, setIsItemModalOpen] = useState(false);
@@ -48,12 +58,21 @@ export const WarehouseView: React.FC<WarehouseViewProps> = ({
   const [transQty, setTransQty] = useState<number>(10);
   const [transOperator, setTransOperator] = useState('');
   const [transNotes, setTransNotes] = useState('');
+  const [transDate, setTransDate] = useState(() => new Date().toISOString().substring(0, 10));
 
-  // Filter Items
+  // Items within the currently drilled-into category
   const filteredItems = items.filter((item) => {
-    const matchesCat = selectedCategory === 'ทั้งหมด' || item.category === selectedCategory;
+    const matchesCat = !drilldownCategory || item.category === drilldownCategory;
     const matchesSearch = item.name.toLowerCase().includes(searchQuery.toLowerCase());
     return matchesCat && matchesSearch;
+  });
+
+  // Category summary for the top-level card view (always show every known category, even if empty, so admin can add the first item)
+  const categoryList = CATEGORIES.filter((c) => c !== 'ทั้งหมด');
+  const categorySummaries = categoryList.map((cat) => {
+    const catItems = items.filter((i) => i.category === cat);
+    const lowCount = catItems.filter((i) => i.minThreshold && i.quantity <= i.minThreshold).length;
+    return { category: cat, count: catItems.length, lowCount };
   });
 
   // Filter Logs
@@ -67,7 +86,7 @@ export const WarehouseView: React.FC<WarehouseViewProps> = ({
   const handleOpenNewItem = () => {
     setEditingItem(null);
     setItemName('');
-    setItemCategory(CATEGORIES[1]);
+    setItemCategory(drilldownCategory || CATEGORIES[1]);
     setItemQty(0);
     setItemUnit('ใบ');
     setItemMinThreshold(10);
@@ -129,6 +148,7 @@ export const WarehouseView: React.FC<WarehouseViewProps> = ({
     setTransQty(10);
     setTransOperator('');
     setTransNotes('');
+    setTransDate(new Date().toISOString().substring(0, 10));
     setIsTransactionModalOpen(true);
   };
 
@@ -154,7 +174,6 @@ export const WarehouseView: React.FC<WarehouseViewProps> = ({
     }
 
     const nowStr = new Date().toLocaleString('sv-SE').substring(0, 16).replace('T', ' ');
-    const todayStr = new Date().toISOString().substring(0, 10);
 
     const newQty = transType === 'IN' ? item.quantity + transQty : item.quantity - transQty;
 
@@ -166,7 +185,7 @@ export const WarehouseView: React.FC<WarehouseViewProps> = ({
 
     // Add log
     onAddLog({
-      date: todayStr,
+      date: transDate,
       itemId: item.id,
       itemName: item.name,
       type: transType,
@@ -175,7 +194,9 @@ export const WarehouseView: React.FC<WarehouseViewProps> = ({
       notes: transNotes.trim() || undefined,
     });
 
-    onShowToast(`บันทึกการ ${transType === 'IN' ? 'นำเข้า' : 'เบิกออก'} ${item.name} จำนวน ${transQty} ${item.unit} โดย ${transOperator} เรียบร้อย`);
+    onShowToast(
+      `บันทึกการ ${transType === 'IN' ? 'นำเข้า' : 'เบิกออก'} ${item.name} จำนวน ${transQty} ${item.unit} โดย ${transOperator} วันที่ ${formatShortDate(transDate)} เรียบร้อย`
+    );
     setIsTransactionModalOpen(false);
   };
 
@@ -183,7 +204,7 @@ export const WarehouseView: React.FC<WarehouseViewProps> = ({
   const lowStockCount = items.filter((i) => i.minThreshold && i.quantity <= i.minThreshold).length;
 
   return (
-    <div className="space-y-6 pb-12">
+    <div className="space-y-6 pb-24">
       {/* Banner */}
       <div className="bg-gradient-to-r from-[#0F172A] to-[#334155] rounded-3xl p-6 text-white shadow-lg flex flex-col md:flex-row md:items-center justify-between gap-4">
         <div>
@@ -250,39 +271,75 @@ export const WarehouseView: React.FC<WarehouseViewProps> = ({
           </button>
         </div>
 
-        {/* Filter & Search */}
-        <div className="flex items-center gap-2 w-full sm:w-auto flex-1 max-w-md">
-          {activeTab === 'ITEMS' && (
-            <select
-              value={selectedCategory}
-              onChange={(e) => setSelectedCategory(e.target.value)}
-              className="px-3 py-2 border border-[#CBD5E1] rounded-xl text-xs font-semibold text-[#1E293B] focus:ring-2 focus:ring-[#0284C7] outline-none cursor-pointer"
-            >
-              {CATEGORIES.map((cat) => (
-                <option key={cat} value={cat}>
-                  {cat}
-                </option>
-              ))}
-            </select>
-          )}
-
-          <div className="relative flex-1">
-            <span className="material-symbols-outlined absolute left-3 top-2.5 text-[#94A3B8] text-base">
-              search
-            </span>
-            <input
-              type="text"
-              placeholder={activeTab === 'ITEMS' ? 'ค้นหาชื่อสินค้า...' : 'ค้นหาผู้เบิก/รายการ...'}
-              value={searchQuery}
-              onChange={(e) => setSearchQuery(e.target.value)}
-              className="w-full pl-9 pr-3 py-2 border border-[#CBD5E1] rounded-xl text-xs focus:ring-2 focus:ring-[#0284C7] outline-none"
-            />
+        {/* Filter & Search — hidden on the top-level category card view; shown once drilled into a category, or on the Logs tab */}
+        {(activeTab === 'LOGS' || (activeTab === 'ITEMS' && drilldownCategory)) && (
+          <div className="flex items-center gap-2 w-full sm:w-auto flex-1 max-w-md">
+            <div className="relative flex-1">
+              <span className="material-symbols-outlined absolute left-3 top-2.5 text-[#94A3B8] text-base">
+                search
+              </span>
+              <input
+                type="text"
+                placeholder={activeTab === 'ITEMS' ? 'ค้นหาชื่อสินค้า...' : 'ค้นหาผู้เบิก/รายการ...'}
+                value={searchQuery}
+                onChange={(e) => setSearchQuery(e.target.value)}
+                className="w-full pl-9 pr-3 py-2 border border-[#CBD5E1] rounded-xl text-xs focus:ring-2 focus:ring-[#0284C7] outline-none"
+              />
+            </div>
           </div>
-        </div>
+        )}
       </div>
 
-      {/* Content Tab 1: Inventory Items */}
-      {activeTab === 'ITEMS' && (
+      {/* Content Tab 1a: Top-level category cards */}
+      {activeTab === 'ITEMS' && !drilldownCategory && (
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+          {categorySummaries.map(({ category, count, lowCount }) => (
+            <button
+              key={category}
+              type="button"
+              onClick={() => setDrilldownCategory(category)}
+              className="text-left bg-white rounded-3xl p-5 border border-[#D2E0EB] hover:border-[#0284C7] shadow-xs hover:shadow-md transition-all cursor-pointer flex items-center gap-4"
+            >
+              <div className="w-14 h-14 rounded-2xl bg-[#EBF2F7] text-[#0284C7] flex items-center justify-center shrink-0">
+                <span className="material-symbols-outlined text-3xl">
+                  {CATEGORY_ICONS[category] || 'category'}
+                </span>
+              </div>
+              <div className="flex-1 min-w-0">
+                <h3 className="font-bold text-base text-[#1E3A5F] truncate">{category}</h3>
+                <p className="text-xs text-[#64748B] mt-0.5">{count} รายการ</p>
+                {lowCount > 0 && (
+                  <span className="inline-flex items-center gap-0.5 mt-1 text-[10px] font-bold bg-[#FEE2E2] text-[#DC2626] border border-[#FCA5A5] px-2 py-0.5 rounded-full animate-pulse">
+                    <span className="material-symbols-outlined text-[12px]">warning</span>
+                    สต๊อกต่ำ {lowCount} รายการ
+                  </span>
+                )}
+              </div>
+              <span className="material-symbols-outlined text-[#94A3B8]">chevron_right</span>
+            </button>
+          ))}
+        </div>
+      )}
+
+      {/* Content Tab 1b: Items within the selected category */}
+      {activeTab === 'ITEMS' && drilldownCategory && (
+        <div className="space-y-4">
+          <button
+            type="button"
+            onClick={() => setDrilldownCategory(null)}
+            className="flex items-center gap-1.5 text-xs font-bold text-[#0284C7] hover:text-[#0369A1] cursor-pointer"
+          >
+            <span className="material-symbols-outlined text-base">arrow_back</span>
+            กลับไปหมวดหมู่ทั้งหมด
+          </button>
+
+          <div className="flex items-center gap-2">
+            <span className="material-symbols-outlined text-[#0284C7]">
+              {CATEGORY_ICONS[drilldownCategory] || 'category'}
+            </span>
+            <h3 className="font-bold text-lg text-[#1E3A5F]">{drilldownCategory}</h3>
+          </div>
+
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
           {filteredItems.length === 0 ? (
             <div className="col-span-full bg-white p-12 rounded-3xl border border-[#D2E0EB] text-center text-[#64748B] font-medium text-sm">
@@ -361,6 +418,7 @@ export const WarehouseView: React.FC<WarehouseViewProps> = ({
             })
           )}
         </div>
+        </div>
       )}
 
       {/* Content Tab 2: Movement Logs */}
@@ -398,7 +456,7 @@ export const WarehouseView: React.FC<WarehouseViewProps> = ({
                   filteredLogs.map((log) => (
                     <tr key={log.id} className="hover:bg-[#F8FAFC] transition-colors">
                       <td className="p-3.5 font-bold text-[#64748B] data-mono whitespace-nowrap">
-                        {log.timestamp}
+                        {formatTimestampDMY(log.timestamp)}
                       </td>
 
                       <td className="p-3.5 font-bold text-[#1E293B]">
@@ -598,16 +656,28 @@ export const WarehouseView: React.FC<WarehouseViewProps> = ({
                 </select>
               </div>
 
-              <div>
-                <label className="text-xs font-bold text-[#1E3A5F]">จำนวน</label>
-                <input
-                  type="number"
-                  min="1"
-                  value={transQty}
-                  onChange={(e) => setTransQty(parseInt(e.target.value) || 1)}
-                  className="w-full mt-1 px-3 py-2.5 border border-[#CBD5E1] rounded-xl text-base font-bold text-[#0284C7] data-mono focus:ring-2 focus:ring-[#0284C7] outline-none"
-                  required
-                />
+              <div className="grid grid-cols-2 gap-2">
+                <div>
+                  <label className="text-xs font-bold text-[#1E3A5F]">จำนวน</label>
+                  <input
+                    type="number"
+                    min="1"
+                    value={transQty}
+                    onChange={(e) => setTransQty(parseInt(e.target.value) || 1)}
+                    className="w-full mt-1 px-3 py-2.5 border border-[#CBD5E1] rounded-xl text-base font-bold text-[#0284C7] data-mono focus:ring-2 focus:ring-[#0284C7] outline-none"
+                    required
+                  />
+                </div>
+
+                <div>
+                  <label className="text-xs font-bold text-[#1E3A5F]">วันที่</label>
+                  <DateInput
+                    value={transDate}
+                    onChange={setTransDate}
+                    className="w-full mt-1 px-3 py-2.5 border border-[#CBD5E1] rounded-xl text-xs font-bold text-[#1E3A5F] data-mono focus:ring-2 focus:ring-[#0284C7] outline-none"
+                    required
+                  />
+                </div>
               </div>
 
               <div>

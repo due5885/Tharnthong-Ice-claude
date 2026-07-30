@@ -1,18 +1,22 @@
 import React, { useState } from 'react';
-import { ExpenseItem, RouteItem } from '../types';
+import { ExpenseCategory, ExpenseItem, RouteItem } from '../types';
 import { useHorizontalWheelScroll } from '../lib/useHorizontalWheelScroll';
 
 interface ExpensesViewProps {
   expenses: ExpenseItem[];
   routes?: RouteItem[];
+  categories: ExpenseCategory[];
   onOpenAddExpenseModal: () => void;
+  onOpenCategoryManager: () => void;
   onDeleteExpense?: (id: string) => void;
 }
 
 export const ExpensesView: React.FC<ExpensesViewProps> = ({
   expenses,
   routes = [],
+  categories: expenseCategories,
   onOpenAddExpenseModal,
+  onOpenCategoryManager,
   onDeleteExpense,
 }) => {
   const [selectedCategory, setSelectedCategory] = useState<string>('All');
@@ -21,11 +25,7 @@ export const ExpensesView: React.FC<ExpensesViewProps> = ({
 
   const categories = [
     { key: 'All', label: 'ทุกหมวดหมู่' },
-    { key: 'Fuel', label: 'ค่าน้ำมัน' },
-    { key: 'Wages', label: 'ค่าแรง' },
-    { key: 'Utilities', label: 'ค่าน้ำ-ค่าไฟ' },
-    { key: 'Maintenance', label: 'ซ่อมบำรุง' },
-    { key: 'Packaging', label: 'บรรจุภัณฑ์' },
+    ...expenseCategories.map((c) => ({ key: c.key, label: c.labelTh })),
   ];
 
   // Build list of route keys for filter
@@ -65,13 +65,22 @@ export const ExpensesView: React.FC<ExpensesViewProps> = ({
           </p>
         </div>
 
-        <button
-          onClick={onOpenAddExpenseModal}
-          className="bg-[#0284C7] hover:bg-[#0369A1] text-white flex items-center justify-center gap-2 px-6 py-3 rounded-xl font-bold text-xs md:text-sm active:scale-95 transition-all shadow-xs cursor-pointer"
-        >
-          <span className="material-symbols-outlined text-lg">add_circle</span>
-          บันทึกรายจ่ายใหม่
-        </button>
+        <div className="flex items-center gap-2">
+          <button
+            onClick={onOpenCategoryManager}
+            className="bg-[#F1F5F9] hover:bg-[#E2E8F0] text-[#1E3A5F] border border-[#CBD5E1] flex items-center justify-center gap-1.5 px-4 py-3 rounded-xl font-bold text-xs md:text-sm transition-all cursor-pointer"
+          >
+            <span className="material-symbols-outlined text-lg text-[#0284C7]">category</span>
+            จัดการหมวดหมู่
+          </button>
+          <button
+            onClick={onOpenAddExpenseModal}
+            className="bg-[#0284C7] hover:bg-[#0369A1] text-white flex items-center justify-center gap-2 px-6 py-3 rounded-xl font-bold text-xs md:text-sm active:scale-95 transition-all shadow-xs cursor-pointer"
+          >
+            <span className="material-symbols-outlined text-lg">add_circle</span>
+            บันทึกรายจ่ายใหม่
+          </button>
+        </div>
       </section>
 
       {/* Request #3: สรุปรายจ่ายแยกตามสายส่งก่อน */}

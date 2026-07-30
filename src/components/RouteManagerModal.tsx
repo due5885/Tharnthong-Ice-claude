@@ -150,6 +150,7 @@ export const RouteManagerModal: React.FC<RouteManagerModalProps> = ({
                   >
                     <option value="mobile">รถกระบะ (ไม่มีหน้าร้าน)</option>
                     <option value="storefront">มีหน้าร้าน</option>
+                    <option value="subline">สายย่อย (รับฝากสั่ง จ่ายยอดเดียว)</option>
                   </select>
                 </div>
 
@@ -225,6 +226,7 @@ export const RouteManagerModal: React.FC<RouteManagerModalProps> = ({
               >
                 <option value="mobile">รถกระบะ (ไม่มีหน้าร้าน) — จบงานจอดที่หน้าร้านใหญ่</option>
                 <option value="storefront">มีหน้าร้าน</option>
+                <option value="subline">สายย่อย (รับฝากสั่ง จ่ายยอดเดียว ไม่แยกชนิดน้ำแข็ง)</option>
               </select>
             </div>
           </div>

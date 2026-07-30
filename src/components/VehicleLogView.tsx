@@ -1,5 +1,7 @@
 import React, { useState } from 'react';
 import { Vehicle, VehicleLogEntry } from '../types';
+import { formatShortDate } from '../lib/statementExport';
+import { DateInput } from './DateInput';
 
 interface VehicleLogViewProps {
   vehicles: Vehicle[];
@@ -127,10 +129,9 @@ export const VehicleLogView: React.FC<VehicleLogViewProps> = ({
             <form onSubmit={handleSubmit} className="grid grid-cols-1 sm:grid-cols-2 gap-3 pt-3 border-t border-[#E2E8F0]">
               <div>
                 <label className="text-xs font-bold text-[#1E3A5F] block mb-1">วันที่</label>
-                <input
-                  type="date"
+                <DateInput
                   value={entryDate}
-                  onChange={(e) => setEntryDate(e.target.value)}
+                  onChange={setEntryDate}
                   className="w-full px-3 py-2 bg-[#F8FAFC] border border-[#CBD5E1] rounded-xl text-sm font-bold text-[#1E3A5F] focus:ring-2 focus:ring-[#0284C7] outline-none"
                 />
               </div>
@@ -245,7 +246,7 @@ export const VehicleLogView: React.FC<VehicleLogViewProps> = ({
                   <div className="flex-1 min-w-0">
                     <div className="flex items-center gap-2 flex-wrap">
                       <span className="font-bold text-sm text-[#1E293B]">{entry.description}</span>
-                      <span className="text-[10px] text-[#64748B]">{entry.date}</span>
+                      <span className="text-[10px] text-[#64748B]">{formatShortDate(entry.date)}</span>
                     </div>
                     {entry.attachmentDataUrl && (
                       <a

@@ -2,13 +2,18 @@ import React, { useMemo, useRef, useState, useEffect } from 'react';
 import { GoogleGenAI } from '@google/genai';
 import { AssistantPersonaId, ChatMessage, RoleLevel } from '../types';
 import { ASSISTANT_PERSONAS, AssistantPersona } from '../lib/assistantPersonas';
+import { DateInput } from './DateInput';
 
 interface AIAssistantViewProps {
   businessContext: string;
   selectedDate: string;
   onDateChange: (date: string) => void;
   roleLevel: RoleLevel;
+  activeAdminName: string;
 }
+
+const MESSAGES_STORAGE_KEY = 'tharnthong_assistant_messages';
+const todayStr = () => new Date().toISOString().slice(0, 10);
 
 const API_KEY = import.meta.env.VITE_GEMINI_API_KEY as string | undefined;
 const MODEL = 'gemini-flash-latest';
@@ -34,6 +39,7 @@ export const AIAssistantView: React.FC<AIAssistantViewProps> = ({
   selectedDate,
   onDateChange,
   roleLevel,
+  activeAdminName,
 }) => {
   const visiblePersonas = Object.values(ASSISTANT_PERSONAS).filter((p) =>
     p.visibleTo.includes(roleLevel)
@@ -42,9 +48,28 @@ export const AIAssistantView: React.FC<AIAssistantViewProps> = ({
   const [activePersonaId, setActivePersonaId] = useState<AssistantPersonaId>(
     visiblePersonas[0]?.id || 'deniz'
   );
+  // Persisted across sessions/logins so the owner can review what accounting staff asked Snow on past days
   const [messagesByPersona, setMessagesByPersona] = useState<
     Record<AssistantPersonaId, ChatMessage[]>
-  >({ deniz: [], nueng: [], snow: [] });
+  >(() => {
+    const saved = localStorage.getItem(MESSAGES_STORAGE_KEY);
+    if (!saved) return { deniz: [], nueng: [], snow: [] };
+    try {
+      const parsed = JSON.parse(saved);
+      return { deniz: [], nueng: [], snow: [], ...parsed };
+    } catch {
+      return { deniz: [], nueng: [], snow: [] };
+    }
+  });
+
+  useEffect(() => {
+    localStorage.setItem(MESSAGES_STORAGE_KEY, JSON.stringify(messagesByPersona));
+  }, [messagesByPersona]);
+
+  // Owner viewing Snow: show today's accounting-staff activity log instead of chatting directly
+  const isOwnerViewingSnow = roleLevel === 'owner' && activePersonaId === 'snow';
+  const [ownerLogDate, setOwnerLogDate] = useState(() => todayStr());
+
   const [input, setInput] = useState('');
   const [isLoading, setIsLoading] = useState(false);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
@@ -59,6 +84,29 @@ export const AIAssistantView: React.FC<AIAssistantViewProps> = ({
 
   const persona = ASSISTANT_PERSONAS[activePersonaId];
   const messages = messagesByPersona[activePersonaId] || [];
+
+  // Group Snow's Q&A by which accounting admin asked, for the owner's daily activity log
+  const ownerLogEntries = (() => {
+    if (!isOwnerViewingSnow) return [] as { askedBy: string; question: string; answer?: string; timestamp: string }[];
+    const snowMessages = (messagesByPersona.snow || []).filter((m) => m.date === ownerLogDate);
+    const entries: { askedBy: string; question: string; answer?: string; timestamp: string }[] = [];
+    snowMessages.forEach((m, i) => {
+      if (m.role !== 'user') return;
+      const next = snowMessages[i + 1];
+      entries.push({
+        askedBy: m.askedBy || 'ไม่ทราบชื่อ',
+        question: m.text,
+        answer: next?.role === 'model' ? next.text : undefined,
+        timestamp: m.timestamp,
+      });
+    });
+    return entries;
+  })();
+
+  const ownerLogByAdmin = ownerLogEntries.reduce<Record<string, typeof ownerLogEntries>>((acc, entry) => {
+    (acc[entry.askedBy] ||= []).push(entry);
+    return acc;
+  }, {});
 
   const ai = useMemo(() => {
     if (!API_KEY) return null;
@@ -85,6 +133,8 @@ export const AIAssistantView: React.FC<AIAssistantViewProps> = ({
       role: 'user',
       text: text.trim(),
       timestamp: new Date().toLocaleTimeString('th-TH', { hour: '2-digit', minute: '2-digit' }),
+      date: todayStr(),
+      askedBy: activeAdminName,
     };
 
     const historyForRequest = [...messages, userMsg];
@@ -110,6 +160,7 @@ export const AIAssistantView: React.FC<AIAssistantViewProps> = ({
         role: 'model',
         text: replyText,
         timestamp: new Date().toLocaleTimeString('th-TH', { hour: '2-digit', minute: '2-digit' }),
+        date: todayStr(),
       };
       setMessagesByPersona((prev) => ({
         ...prev,
@@ -142,11 +193,10 @@ export const AIAssistantView: React.FC<AIAssistantViewProps> = ({
           <div className="flex items-center gap-2 bg-[#F8FAFC] border border-[#CBD5E1] px-3 py-1.5 rounded-xl">
             <span className="material-symbols-outlined text-sm text-[#0284C7]">calendar_today</span>
             <span className="text-xs font-bold text-[#1E3A5F]">ข้อมูลวันที่:</span>
-            <input
-              type="date"
+            <DateInput
               value={selectedDate}
-              onChange={(e) => onDateChange(e.target.value)}
-              className="bg-transparent text-xs font-bold text-[#0284C7] data-mono outline-none cursor-pointer"
+              onChange={onDateChange}
+              className="bg-transparent text-xs font-bold text-[#0284C7] data-mono outline-none cursor-pointer w-24"
             />
           </div>
         </div>
@@ -204,8 +254,68 @@ export const AIAssistantView: React.FC<AIAssistantViewProps> = ({
         </div>
       )}
 
+      {/* Owner's view of Snow: daily activity log of what the accounting staff asked, instead of chatting directly */}
+      {isOwnerViewingSnow && (
+        <section className="bg-white rounded-2xl border border-[#D2E0EB] shadow-xs p-4 sm:p-5 space-y-4">
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+            <div>
+              <h3 className="font-bold text-base text-[#1E3A5F] flex items-center gap-2">
+                <span className="material-symbols-outlined text-[#0284C7]">group</span>
+                กิจกรรมฝ่ายบัญชีวันนี้ — ใครถาม Snow อะไรบ้าง
+              </h3>
+              <p className="text-xs text-[#64748B] mt-0.5">
+                ดูได้ว่าแอดมินฝ่ายบัญชีแต่ละคนถาม Snow เรื่องอะไรไปบ้างในแต่ละวัน
+              </p>
+            </div>
+            <div className="flex items-center gap-2 bg-[#F8FAFC] border border-[#CBD5E1] px-3 py-1.5 rounded-xl shrink-0">
+              <span className="material-symbols-outlined text-sm text-[#0284C7]">calendar_today</span>
+              <DateInput
+                value={ownerLogDate}
+                onChange={setOwnerLogDate}
+                className="bg-transparent text-xs font-bold text-[#0284C7] data-mono outline-none cursor-pointer w-24"
+              />
+            </div>
+          </div>
+
+          {Object.keys(ownerLogByAdmin).length === 0 ? (
+            <div className="text-center text-xs text-[#94A3B8] py-8">
+              ยังไม่มีแอดมินฝ่ายบัญชีคุยกับ Snow ในวันที่เลือกนี้
+            </div>
+          ) : (
+            <div className="space-y-4">
+              {Object.entries(ownerLogByAdmin).map(([adminName, entries]) => (
+                <div key={adminName} className="border border-[#E2E8F0] rounded-2xl overflow-hidden">
+                  <div className="bg-[#EBF2F7] px-4 py-2.5 flex items-center justify-between">
+                    <span className="font-bold text-sm text-[#1E3A5F] flex items-center gap-1.5">
+                      <span className="material-symbols-outlined text-base">person</span>
+                      {adminName}
+                    </span>
+                    <span className="text-[10px] font-bold bg-white text-[#64748B] px-2 py-0.5 rounded-full border border-[#D2E0EB]">
+                      ถาม {entries.length} ครั้ง
+                    </span>
+                  </div>
+                  <div className="divide-y divide-[#F1F5F9]">
+                    {entries.map((e, i) => (
+                      <div key={i} className="p-3 space-y-1">
+                        <div className="flex items-center gap-2">
+                          <span className="text-[10px] font-bold text-[#94A3B8] data-mono shrink-0">{e.timestamp}</span>
+                          <span className="text-xs font-bold text-[#1E293B]">{e.question}</span>
+                        </div>
+                        {e.answer && (
+                          <p className="text-[11px] text-[#64748B] pl-[52px] line-clamp-3 whitespace-pre-wrap">{e.answer}</p>
+                        )}
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+        </section>
+      )}
+
       {/* Chat Window */}
-      <section className="bg-white rounded-2xl border border-[#D2E0EB] shadow-xs flex flex-col h-[60vh] min-h-[420px]">
+      <section className="bg-white rounded-2xl border border-[#D2E0EB] shadow-xs flex flex-col h-[60dvh] min-h-[420px]">
         <div className="flex items-center gap-3 px-4 py-3 border-b border-[#E2E8F0]">
           <PersonaAvatar
             persona={persona}

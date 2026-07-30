@@ -1,8 +1,9 @@
-import React, { useState } from 'react';
+import React, { useMemo, useRef, useState } from 'react';
 import { CustomerAccount, IceProduct, IceQuantity, PaymentStatus, PaymentStatusLabels, RoleLevel, RouteItem } from '../types';
 import { IceBucketManagerModal } from './IceBucketManagerModal';
 import { ConfirmStatusModal } from './ConfirmStatusModal';
 import { canEditPaymentStatusLabels } from '../lib/permissions';
+import { DateInput } from './DateInput';
 
 interface CustomersViewProps {
   customers: CustomerAccount[];
@@ -15,6 +16,7 @@ interface CustomersViewProps {
   onDeleteCustomer: (id: string) => void;
   onOpenPriceModal: (customer: CustomerAccount) => void;
   onOpenNewAndOldModal: (customer: CustomerAccount) => void;
+  onOpenSublineCash: () => void;
   onOpenRouteManager: () => void;
   onOpenProductManager: () => void;
   onOpenStatusLabelsModal: () => void;
@@ -37,6 +39,7 @@ export const CustomersView: React.FC<CustomersViewProps> = ({
   onDeleteCustomer,
   onOpenPriceModal,
   onOpenNewAndOldModal,
+  onOpenSublineCash,
   onOpenRouteManager,
   onOpenProductManager,
   onOpenStatusLabelsModal,
@@ -54,8 +57,32 @@ export const CustomersView: React.FC<CustomersViewProps> = ({
     customer: CustomerAccount;
     status: PaymentStatus;
   } | null>(null);
+  const stickyBarRef = useRef<HTMLDivElement>(null);
+  const cardRefs = useRef<Record<string, HTMLDivElement | null>>({});
 
-  const filteredCustomers = customers.filter((cust) => {
+  // สายย่อย (sub-line) customers get their own compact section further down — they're
+  // a flat cash-in/cash-out relationship, not itemized ice sales, so they're excluded
+  // from the regular route filter/list entirely.
+  const sublineCustomers = customers.filter(
+    (c) => routes.find((r) => r.name === c.route)?.type === 'subline'
+  );
+  const regularCustomers = customers.filter(
+    (c) => routes.find((r) => r.name === c.route)?.type !== 'subline'
+  );
+  const regularRoutes = routes.filter((r) => r.type !== 'subline');
+
+  // Running number per route (1, 2, 3...), stable regardless of the active route filter/search
+  const routeIndexById = useMemo(() => {
+    const counters: Record<string, number> = {};
+    const map: Record<string, number> = {};
+    regularCustomers.forEach((c) => {
+      counters[c.route] = (counters[c.route] || 0) + 1;
+      map[c.id] = counters[c.route];
+    });
+    return map;
+  }, [regularCustomers]);
+
+  const filteredCustomers = regularCustomers.filter((cust) => {
     const matchesRoute =
       selectedRoute === 'ทั้งหมด' || cust.route === selectedRoute;
     const matchesSearch =
@@ -63,6 +90,26 @@ export const CustomersView: React.FC<CustomersViewProps> = ({
       cust.code.toLowerCase().includes(searchQuery.toLowerCase());
     return matchesRoute && matchesSearch;
   });
+
+  // "1-20 / 21-40 / ..." quick-jump chunks for long lists
+  const JUMP_CHUNK_SIZE = 20;
+  const jumpChunks = useMemo(() => {
+    const chunks: { startIndex: number; label: string }[] = [];
+    for (let i = 0; i < filteredCustomers.length; i += JUMP_CHUNK_SIZE) {
+      const end = Math.min(i + JUMP_CHUNK_SIZE, filteredCustomers.length);
+      chunks.push({ startIndex: i, label: `${i + 1}-${end}` });
+    }
+    return chunks;
+  }, [filteredCustomers]);
+
+  const handleJumpTo = (index: number) => {
+    const target = filteredCustomers[index];
+    const el = target && cardRefs.current[target.id];
+    if (!el) return;
+    const stickyBarHeight = stickyBarRef.current?.offsetHeight || 0;
+    const top = el.getBoundingClientRect().top + window.scrollY - stickyBarHeight - 76;
+    window.scrollTo({ top, behavior: 'smooth' });
+  };
 
   const getUnitPrice = (cust: CustomerAccount, key: string) => {
     if (cust.customPrices && cust.customPrices[key] !== undefined) {
@@ -155,11 +202,10 @@ export const CustomersView: React.FC<CustomersViewProps> = ({
           </h2>
           <div className="flex items-center gap-2 mt-1 text-[#1E293B] text-xs md:text-sm">
             <span className="material-symbols-outlined text-sm text-[#0284C7]">calendar_today</span>
-            <input
-              type="date"
+            <DateInput
               value={selectedDate}
-              onChange={(e) => onDateChange(e.target.value)}
-              className="data-mono font-bold bg-[#E0F2FE] text-[#0369A1] px-2 py-0.5 rounded-lg border border-[#BAE6FD] cursor-pointer"
+              onChange={onDateChange}
+              className="data-mono font-bold bg-[#E0F2FE] text-[#0369A1] px-2 py-0.5 rounded-lg border border-[#BAE6FD] cursor-pointer w-24"
             />
             <span className="text-[#64748B]">|</span>
             <span className="font-semibold text-[#1E3A5F]">{currentShift}</span>
@@ -187,6 +233,14 @@ export const CustomersView: React.FC<CustomersViewProps> = ({
           </button>
 
           <button
+            onClick={onOpenSublineCash}
+            className="flex items-center gap-1.5 px-3 py-2 bg-[#D1FAE5] hover:bg-[#A7F3D0] text-[#047857] rounded-xl text-xs font-bold transition-all border border-[#6EE7B7] cursor-pointer"
+          >
+            <span className="material-symbols-outlined text-sm text-[#059669]">payments</span>
+            รับเงินสายย่อย{sublineCustomers.length > 0 ? ` (${sublineCustomers.length})` : ''}
+          </button>
+
+          <button
             onClick={onOpenProductManager}
             className="flex items-center gap-1.5 px-3 py-2 bg-[#F1F5F9] hover:bg-[#E2E8F0] text-[#1E3A5F] rounded-xl text-xs font-bold transition-all border border-[#CBD5E1] cursor-pointer"
           >
@@ -205,8 +259,12 @@ export const CustomersView: React.FC<CustomersViewProps> = ({
         </div>
       </div>
 
-      {/* Filter and Search Bar */}
-      <div className="bg-white p-3.5 rounded-2xl border border-[#D2E0EB] shadow-xs flex flex-col sm:flex-row sm:items-start items-center justify-between gap-3">
+      {/* Filter and Search Bar — sticky so it stays reachable while scrolling a long customer list */}
+      <div
+        ref={stickyBarRef}
+        className="sticky top-16 z-30 bg-white p-3.5 rounded-2xl border border-[#D2E0EB] shadow-md space-y-3"
+      >
+        <div className="flex flex-col sm:flex-row sm:items-start items-center justify-between gap-3">
         {/* Route Selector Filter Tabs */}
         <div className="flex items-center gap-1 flex-wrap w-full sm:w-auto">
           <button
@@ -218,11 +276,11 @@ export const CustomersView: React.FC<CustomersViewProps> = ({
                 : 'text-[#64748B] hover:bg-[#F1F5F9]'
             }`}
           >
-            ทั้งหมด ({customers.length})
+            ทั้งหมด ({regularCustomers.length})
           </button>
 
-          {routes.map((r) => {
-            const count = customers.filter((c) => c.route === r.name).length;
+          {regularRoutes.map((r) => {
+            const count = regularCustomers.filter((c) => c.route === r.name).length;
             return (
               <button
                 key={r.id}
@@ -253,6 +311,24 @@ export const CustomersView: React.FC<CustomersViewProps> = ({
             className="w-full pl-9 pr-3 py-1.5 rounded-xl border border-[#D2E0EB] bg-[#F8FAFC] text-xs font-medium focus:ring-2 focus:ring-[#1E3A5F] outline-none"
           />
         </div>
+        </div>
+
+        {/* Quick-jump row — for long lists, jump straight to a chunk of numbers instead of scrolling manually */}
+        {jumpChunks.length > 1 && (
+          <div className="flex items-center gap-1.5 flex-wrap pt-2 border-t border-[#F1F5F9]">
+            <span className="text-[11px] font-bold text-[#64748B] shrink-0">ไปที่ลำดับ:</span>
+            {jumpChunks.map((chunk) => (
+              <button
+                key={chunk.startIndex}
+                type="button"
+                onClick={() => handleJumpTo(chunk.startIndex)}
+                className="px-2.5 py-1 rounded-lg bg-[#F1F5F9] hover:bg-[#E0F2FE] text-[#0284C7] text-[11px] font-bold border border-[#D2E0EB] cursor-pointer transition-colors"
+              >
+                {chunk.label}
+              </button>
+            ))}
+          </div>
+        )}
       </div>
 
       {/* Customer Ledger Cards/Table (Responsive PC & Mobile) */}
@@ -268,6 +344,9 @@ export const CustomersView: React.FC<CustomersViewProps> = ({
             return (
               <div
                 key={customer.id}
+                ref={(el) => {
+                  cardRefs.current[customer.id] = el;
+                }}
                 className="bg-white rounded-2xl p-4 border border-[#D2E0EB] hover:border-[#0284C7] shadow-xs transition-all space-y-3"
               >
                 {/* Top Row: Name, Route & Manage Buttons */}
@@ -277,7 +356,7 @@ export const CustomersView: React.FC<CustomersViewProps> = ({
                     <div>
                       <div className="flex items-center gap-2 flex-wrap">
                         <span className="font-bold text-base text-[#1E3A5F]">
-                          {customer.name}
+                          {routeIndexById[customer.id]}. {customer.name}
                         </span>
                         {hasCustomPrice && (
                           <span className="text-[10px] font-bold bg-[#FEF3C7] text-[#D97706] border border-[#FDE68A] px-2 py-0.5 rounded-full">
@@ -342,57 +421,57 @@ export const CustomersView: React.FC<CustomersViewProps> = ({
 
                 {/* Product Quantities Input Grid */}
                 <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-7 gap-2">
-                  {products.map((prod) => {
-                    const price = getUnitPrice(customer, prod.key);
-                    const qty = customer.quantities[prod.key] || 0;
+                    {products.map((prod) => {
+                      const price = getUnitPrice(customer, prod.key);
+                      const qty = customer.quantities[prod.key] || 0;
 
-                    return (
-                      <div
-                        key={prod.id}
-                        className="flex flex-col gap-1 p-2 bg-[#F8FAFC] border border-[#E2E8F0] rounded-xl"
-                      >
-                        <div className="flex items-center justify-between text-[11px] font-bold text-[#64748B]">
-                          <span className="truncate">{prod.labelTh}</span>
-                          <span className="text-[10px] text-[#0284C7] shrink-0">฿{price}</span>
+                      return (
+                        <div
+                          key={prod.id}
+                          className="flex flex-col gap-1 p-2 bg-[#F8FAFC] border border-[#E2E8F0] rounded-xl"
+                        >
+                          <div className="flex items-center justify-between text-[11px] font-bold text-[#64748B]">
+                            <span className="truncate">{prod.labelTh}</span>
+                            <span className="text-[10px] text-[#0284C7] shrink-0">฿{price}</span>
+                          </div>
+                          <input
+                            type="number"
+                            min="0"
+                            value={qty || ''}
+                            placeholder="0"
+                            onChange={(e) =>
+                              handleQuantityChange(
+                                customer.id,
+                                prod.key,
+                                parseInt(e.target.value) || 0
+                              )
+                            }
+                            className="w-full h-9 border border-[#CBD5E1] bg-white rounded-lg text-center font-bold text-sm text-[#1E3A5F] data-mono focus:ring-1 focus:ring-[#0284C7] outline-none"
+                          />
                         </div>
-                        <input
-                          type="number"
-                          min="0"
-                          value={qty || ''}
-                          placeholder="0"
-                          onChange={(e) =>
-                            handleQuantityChange(
-                              customer.id,
-                              prod.key,
-                              parseInt(e.target.value) || 0
-                            )
-                          }
-                          className="w-full h-9 border border-[#CBD5E1] bg-white rounded-lg text-center font-bold text-sm text-[#1E3A5F] data-mono focus:ring-1 focus:ring-[#0284C7] outline-none"
-                        />
-                      </div>
-                    );
-                  })}
+                      );
+                    })}
 
-                  {/* Extra amount (เศษเงิน) */}
-                  <div className="flex flex-col gap-1 p-2 bg-[#F1F5F9] border border-[#CBD5E1] rounded-xl col-span-2 sm:col-span-1">
-                    <div className="flex items-center justify-between text-[11px] font-bold text-[#64748B]">
-                      <span>เศษเงิน</span>
-                      <span className="text-[10px] text-[#64748B]">บาท</span>
+                    {/* Extra amount (เศษเงิน) */}
+                    <div className="flex flex-col gap-1 p-2 bg-[#F1F5F9] border border-[#CBD5E1] rounded-xl col-span-2 sm:col-span-1">
+                      <div className="flex items-center justify-between text-[11px] font-bold text-[#64748B]">
+                        <span>เศษเงิน</span>
+                        <span className="text-[10px] text-[#64748B]">บาท</span>
+                      </div>
+                      <input
+                        type="number"
+                        min="0"
+                        value={customer.extraAmount || ''}
+                        placeholder="0.00"
+                        onChange={(e) =>
+                          handleExtraAmountChange(
+                            customer.id,
+                            parseFloat(e.target.value) || 0
+                          )
+                        }
+                        className="w-full h-9 border border-[#CBD5E1] bg-white rounded-lg text-center font-bold text-sm text-[#1E293B] data-mono focus:ring-1 focus:ring-[#1E3A5F] outline-none"
+                      />
                     </div>
-                    <input
-                      type="number"
-                      min="0"
-                      value={customer.extraAmount || ''}
-                      placeholder="0.00"
-                      onChange={(e) =>
-                        handleExtraAmountChange(
-                          customer.id,
-                          parseFloat(e.target.value) || 0
-                        )
-                      }
-                      className="w-full h-9 border border-[#CBD5E1] bg-white rounded-lg text-center font-bold text-sm text-[#1E293B] data-mono focus:ring-1 focus:ring-[#1E3A5F] outline-none"
-                    />
-                  </div>
                 </div>
 
                 {/* Bottom Row: Total Amount & Payment Status Selector */}
@@ -414,65 +493,65 @@ export const CustomersView: React.FC<CustomersViewProps> = ({
 
                   {/* Payment Status Chips */}
                   <div className="flex items-center gap-1.5 flex-wrap py-1">
-                    <button
-                      type="button"
-                      onClick={() => handleStatusToggle(customer.id, 'Cash')}
-                      className={`px-3 py-1.5 rounded-xl text-xs font-bold whitespace-nowrap transition-all cursor-pointer ${
-                        customer.status === 'Cash'
-                          ? 'bg-[#0284C7] text-white shadow-xs'
-                          : 'border border-[#0284C7] text-[#0284C7] hover:bg-[#0284C7]/10'
-                      }`}
-                    >
-                      {statusLabels.Cash}
-                    </button>
+                      <button
+                        type="button"
+                        onClick={() => handleStatusToggle(customer.id, 'Cash')}
+                        className={`px-3 py-1.5 rounded-xl text-xs font-bold whitespace-nowrap transition-all cursor-pointer ${
+                          customer.status === 'Cash'
+                            ? 'bg-[#0284C7] text-white shadow-xs'
+                            : 'border border-[#0284C7] text-[#0284C7] hover:bg-[#0284C7]/10'
+                        }`}
+                      >
+                        {statusLabels.Cash}
+                      </button>
 
-                    <button
-                      type="button"
-                      onClick={() => handleStatusToggle(customer.id, 'Debt')}
-                      className={`px-3 py-1.5 rounded-xl text-xs font-bold whitespace-nowrap transition-all cursor-pointer ${
-                        customer.status === 'Debt'
-                          ? 'bg-[#DC2626] text-white shadow-xs'
-                          : 'border border-[#DC2626] text-[#DC2626] hover:bg-[#DC2626]/10'
-                      }`}
-                    >
-                      {statusLabels.Debt}
-                    </button>
+                      <button
+                        type="button"
+                        onClick={() => handleStatusToggle(customer.id, 'Debt')}
+                        className={`px-3 py-1.5 rounded-xl text-xs font-bold whitespace-nowrap transition-all cursor-pointer ${
+                          customer.status === 'Debt'
+                            ? 'bg-[#DC2626] text-white shadow-xs'
+                            : 'border border-[#DC2626] text-[#DC2626] hover:bg-[#DC2626]/10'
+                        }`}
+                      >
+                        {statusLabels.Debt}
+                      </button>
 
-                    <button
-                      type="button"
-                      onClick={() => handleStatusToggle(customer.id, 'Credit')}
-                      className={`px-3 py-1.5 rounded-xl text-xs font-bold whitespace-nowrap transition-all cursor-pointer ${
-                        customer.status === 'Credit'
-                          ? 'bg-[#475569] text-white shadow-xs'
-                          : 'border border-[#475569] text-[#475569] hover:bg-[#475569]/10'
-                      }`}
-                    >
-                      {statusLabels.Credit}
-                    </button>
+                      <button
+                        type="button"
+                        onClick={() => handleStatusToggle(customer.id, 'Credit')}
+                        className={`px-3 py-1.5 rounded-xl text-xs font-bold whitespace-nowrap transition-all cursor-pointer ${
+                          customer.status === 'Credit'
+                            ? 'bg-[#475569] text-white shadow-xs'
+                            : 'border border-[#475569] text-[#475569] hover:bg-[#475569]/10'
+                        }`}
+                      >
+                        {statusLabels.Credit}
+                      </button>
 
-                    <button
-                      type="button"
-                      onClick={() => handleStatusToggle(customer.id, 'OldPayment')}
-                      className={`px-3 py-1.5 rounded-xl text-xs font-bold whitespace-nowrap transition-all cursor-pointer ${
-                        customer.status === 'OldPayment'
-                          ? 'bg-[#D97706] text-white shadow-xs'
-                          : 'border border-[#D97706] text-[#D97706] hover:bg-[#D97706]/10'
-                      }`}
-                    >
-                      {statusLabels.OldPayment}
-                    </button>
+                      <button
+                        type="button"
+                        onClick={() => handleStatusToggle(customer.id, 'OldPayment')}
+                        className={`px-3 py-1.5 rounded-xl text-xs font-bold whitespace-nowrap transition-all cursor-pointer ${
+                          customer.status === 'OldPayment'
+                            ? 'bg-[#D97706] text-white shadow-xs'
+                            : 'border border-[#D97706] text-[#D97706] hover:bg-[#D97706]/10'
+                        }`}
+                      >
+                        {statusLabels.OldPayment}
+                      </button>
 
-                    <button
-                      type="button"
-                      onClick={() => handleStatusToggle(customer.id, 'NewAndOld')}
-                      className={`px-3 py-1.5 rounded-xl text-xs font-bold whitespace-nowrap transition-all cursor-pointer ${
-                        customer.status === 'NewAndOld'
-                          ? 'bg-[#B45309] text-white shadow-xs'
-                          : 'border border-[#B45309] text-[#B45309] hover:bg-[#FEF3C7]'
-                      }`}
-                    >
-                      {statusLabels.NewAndOld}
-                    </button>
+                      <button
+                        type="button"
+                        onClick={() => handleStatusToggle(customer.id, 'NewAndOld')}
+                        className={`px-3 py-1.5 rounded-xl text-xs font-bold whitespace-nowrap transition-all cursor-pointer ${
+                          customer.status === 'NewAndOld'
+                            ? 'bg-[#B45309] text-white shadow-xs'
+                            : 'border border-[#B45309] text-[#B45309] hover:bg-[#FEF3C7]'
+                        }`}
+                      >
+                        {statusLabels.NewAndOld}
+                      </button>
                   </div>
                 </div>
               </div>

@@ -1,5 +1,7 @@
 import React from 'react';
 import { RoleLevel } from '../types';
+import { resolveAdminAvatarByName } from '../lib/adminAvatars';
+import { DateInput } from './DateInput';
 
 interface HeaderProps {
   onSearchToggle?: () => void;
@@ -32,6 +34,16 @@ export const Header: React.FC<HeaderProps> = ({
   onOpenBackup,
   onLogout,
 }) => {
+  const avatarUrl = resolveAdminAvatarByName(activeAdminName);
+  const AdminAvatar = () =>
+    avatarUrl ? (
+      <img src={avatarUrl} alt={activeAdminName} className="w-4 h-4 rounded-full object-cover shrink-0" />
+    ) : (
+      <span className="material-symbols-outlined text-sm text-[#A2D2FF]">
+        {roleLevel === 'owner' ? 'manage_accounts' : 'person'}
+      </span>
+    );
+
   return (
     <header className="bg-[#1E3A5F] text-white fixed top-0 w-full z-50 shadow-xs flex justify-between items-center px-3 md:px-8 h-16 transition-all border-b border-[#152C4A]">
       <div className="flex items-center gap-2 md:gap-3">
@@ -52,11 +64,10 @@ export const Header: React.FC<HeaderProps> = ({
         {/* Date Selector */}
         <div className="flex items-center gap-1 bg-white/15 hover:bg-white/20 border border-white/20 rounded-full px-2.5 py-1 text-xs font-semibold text-white transition-all">
           <span className="material-symbols-outlined text-sm text-[#A2D2FF]">calendar_month</span>
-          <input
-            type="date"
+          <DateInput
             value={selectedDate}
-            onChange={(e) => onDateChange(e.target.value)}
-            className="bg-transparent text-white focus:outline-none text-xs cursor-pointer font-sans"
+            onChange={onDateChange}
+            className="bg-transparent text-white focus:outline-none text-xs cursor-pointer font-sans w-[4.5rem] data-mono"
           />
         </div>
 
@@ -107,13 +118,13 @@ export const Header: React.FC<HeaderProps> = ({
             className="flex items-center gap-1.5 bg-white/15 hover:bg-white/25 border border-white/20 px-2.5 py-1 rounded-full text-xs font-bold text-white transition-all cursor-pointer"
             title="จัดการรายชื่อ Admin/พนักงาน"
           >
-            <span className="material-symbols-outlined text-sm text-[#A2D2FF]">manage_accounts</span>
+            <AdminAvatar />
             <span className="max-w-[100px] truncate hidden md:inline">{activeAdminName}</span>
             <span className="material-symbols-outlined text-xs">arrow_drop_down</span>
           </button>
         ) : (
           <span className="flex items-center gap-1.5 bg-white/10 border border-white/20 px-2.5 py-1 rounded-full text-xs font-bold text-white">
-            <span className="material-symbols-outlined text-sm text-[#A2D2FF]">person</span>
+            <AdminAvatar />
             <span className="max-w-[100px] truncate hidden md:inline">{activeAdminName}</span>
           </span>
         )}

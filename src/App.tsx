@@ -5,9 +5,11 @@ import {
   CustomerAccount,
   DeliveryRecord,
   Employee,
+  ExpenseCategory,
   ExpenseItem,
   IceProduct,
   IceQuantity,
+  EmployeeLoan,
   MonthlyFixedExpense,
   OperationSummaryStats,
   PaymentStatus,
@@ -25,6 +27,7 @@ import {
 } from './types';
 import {
   INITIAL_CUSTOMERS,
+  INITIAL_EXPENSE_CATEGORIES,
   INITIAL_EXPENSES,
   INITIAL_ICE_PRODUCTS,
   INITIAL_MONTHLY_FIXED_EXPENSES,
@@ -41,6 +44,7 @@ import { Sidebar } from './components/Sidebar';
 import { BottomNav } from './components/BottomNav';
 import { OperationsView } from './components/OperationsView';
 import { CustomersView } from './components/CustomersView';
+import { SublineCashView } from './components/SublineCashView';
 import { CustomerDetailsView } from './components/CustomerDetailsView';
 import { CreditCustomersView } from './components/CreditCustomersView';
 import { PaymentStatusLabelsModal } from './components/PaymentStatusLabelsModal';
@@ -48,6 +52,7 @@ import { WarehouseView } from './components/WarehouseView';
 import { SummaryView } from './components/SummaryView';
 import { ExpensesView } from './components/ExpensesView';
 import { AddExpenseModal } from './components/AddExpenseModal';
+import { ExpenseCategoryManagerModal } from './components/ExpenseCategoryManagerModal';
 import { AddCustomerModal } from './components/AddCustomerModal';
 import { ManageAdminsModal } from './components/ManageAdminsModal';
 import { BackupModal } from './components/BackupModal';
@@ -66,6 +71,7 @@ import { VehicleLogView } from './components/VehicleLogView';
 import { buildBusinessContext } from './lib/assistantContext';
 import { canAccessTab } from './lib/permissions';
 import { DEFAULT_PAYMENT_STATUS_LABELS } from './lib/paymentStatusLabels';
+import { useFirestoreSyncedState } from './lib/useFirestoreSyncedState';
 
 const INITIAL_ADMINS: AdminUser[] = [
   { id: 'ADMIN-1', name: 'Dumrong (เจ้าของร้าน)', role: 'เจ้าของร้าน / ผู้จัดการ', roleLevel: 'owner', pin: '501442' },
@@ -153,19 +159,27 @@ export default function App() {
     return saved ? JSON.parse(saved) : INITIAL_OVERALL_SUMMARY;
   });
 
-  const [recentDeliveries, setRecentDeliveries] = useState<DeliveryRecord[]>(() => {
-    const saved = localStorage.getItem('tharnthong_deliveries');
-    return saved ? JSON.parse(saved) : INITIAL_RECENT_DELIVERIES;
-  });
+  // Synced to Firestore (cross-device) with localStorage as a local cache/fallback.
+  const [recentDeliveries, setRecentDeliveries] = useFirestoreSyncedState<DeliveryRecord[]>(
+    'app_data/deliveries',
+    'tharnthong_deliveries',
+    INITIAL_RECENT_DELIVERIES
+  );
 
-  const [customers, setCustomers] = useState<CustomerAccount[]>(() => {
-    const saved = localStorage.getItem('tharnthong_customers');
-    return saved ? JSON.parse(saved) : INITIAL_CUSTOMERS;
-  });
+  const [customers, setCustomers] = useFirestoreSyncedState<CustomerAccount[]>(
+    'app_data/customers',
+    'tharnthong_customers',
+    INITIAL_CUSTOMERS
+  );
 
   const [expenses, setExpenses] = useState<ExpenseItem[]>(() => {
     const saved = localStorage.getItem('tharnthong_expenses');
     return saved ? JSON.parse(saved) : INITIAL_EXPENSES;
+  });
+
+  const [expenseCategories, setExpenseCategories] = useState<ExpenseCategory[]>(() => {
+    const saved = localStorage.getItem('tharnthong_expense_categories');
+    return saved ? JSON.parse(saved) : INITIAL_EXPENSE_CATEGORIES;
   });
 
   // Payment Status Labels (editable by owner/accountant)
@@ -205,6 +219,12 @@ export default function App() {
     return saved ? JSON.parse(saved) : [];
   });
 
+  // Employee Loans (ยืมเงิน) State
+  const [employeeLoans, setEmployeeLoans] = useState<EmployeeLoan[]>(() => {
+    const saved = localStorage.getItem('tharnthong_employee_loans');
+    return saved ? JSON.parse(saved) : [];
+  });
+
   // Vehicle Master List State
   const [vehicles, setVehicles] = useState<Vehicle[]>(() => {
     const saved = localStorage.getItem('tharnthong_vehicles');
@@ -219,6 +239,7 @@ export default function App() {
 
   // Modals state
   const [isAddExpenseOpen, setIsAddExpenseOpen] = useState(false);
+  const [isExpenseCategoryManagerOpen, setIsExpenseCategoryManagerOpen] = useState(false);
   const [isAddCustomerOpen, setIsAddCustomerOpen] = useState(false);
   const [isManageAdminsOpen, setIsManageAdminsOpen] = useState(false);
   const [isBackupOpen, setIsBackupOpen] = useState(false);
@@ -270,17 +291,15 @@ export default function App() {
     localStorage.setItem('tharnthong_summary', JSON.stringify(summaryData));
   }, [summaryData]);
 
-  useEffect(() => {
-    localStorage.setItem('tharnthong_deliveries', JSON.stringify(recentDeliveries));
-  }, [recentDeliveries]);
-
-  useEffect(() => {
-    localStorage.setItem('tharnthong_customers', JSON.stringify(customers));
-  }, [customers]);
+  // recentDeliveries and customers persist via useFirestoreSyncedState above (localStorage + Firestore).
 
   useEffect(() => {
     localStorage.setItem('tharnthong_expenses', JSON.stringify(expenses));
   }, [expenses]);
+
+  useEffect(() => {
+    localStorage.setItem('tharnthong_expense_categories', JSON.stringify(expenseCategories));
+  }, [expenseCategories]);
 
   useEffect(() => {
     localStorage.setItem('tharnthong_status_labels', JSON.stringify(statusLabels));
@@ -301,6 +320,10 @@ export default function App() {
   useEffect(() => {
     localStorage.setItem('tharnthong_attendance', JSON.stringify(attendanceRecords));
   }, [attendanceRecords]);
+
+  useEffect(() => {
+    localStorage.setItem('tharnthong_employee_loans', JSON.stringify(employeeLoans));
+  }, [employeeLoans]);
 
   useEffect(() => {
     localStorage.setItem('tharnthong_vehicles', JSON.stringify(vehicles));
@@ -399,11 +422,10 @@ export default function App() {
   };
 
   // Monthly Fixed Expense Handlers
-  const handleAddMonthlyExpense = (name: string, amount: number) => {
-    const currentMonth = selectedDate.slice(0, 7);
+  const handleAddMonthlyExpense = (month: string, name: string, amount: number) => {
     const newExpense: MonthlyFixedExpense = {
       id: `MEXP-${Date.now().toString().slice(-4)}`,
-      month: currentMonth,
+      month,
       name,
       amount,
     };
@@ -463,7 +485,8 @@ export default function App() {
   const recordCustomerBillHistory = (
     customer: CustomerAccount,
     status: PaymentStatus,
-    statusDetails?: PaymentStatusDetails
+    statusDetails?: PaymentStatusDetails,
+    extra?: Partial<Pick<DeliveryRecord, 'paymentMethod' | 'note'>>
   ) => {
     const now = new Date();
     const hours = String(now.getHours()).padStart(2, '0');
@@ -481,8 +504,46 @@ export default function App() {
       date: selectedDate,
       routeId: routeObj?.id,
       routeName: customer.route,
+      ...extra,
     };
     setRecentDeliveries((prev) => [newRecord, ...prev]);
+  };
+
+  // สายย่อย: single signed cash entry per day. "ร้านใหญ่สำรอง" (isFronted) records a negative
+  // amount, meaning the shop covered the shortfall instead of the sub-line paying in full.
+  const handleRecordSublinePayment = (
+    customerId: string,
+    amount: number,
+    isFronted: boolean,
+    method: 'Cash' | 'Transfer',
+    note: string
+  ) => {
+    const customer = customers.find((c) => c.id === customerId);
+    if (!customer) return;
+
+    const signedAmount = isFronted ? -Math.abs(amount) : Math.abs(amount);
+
+    setCustomers((prev) =>
+      prev.map((c) =>
+        c.id === customerId
+          ? {
+              ...c,
+              status: 'Cash',
+              statusDetails: undefined,
+              extraAmount: signedAmount,
+              totalAmount: signedAmount,
+              lastUpdated: selectedDate,
+            }
+          : c
+      )
+    );
+
+    recordCustomerBillHistory(
+      { ...customer, totalAmount: signedAmount },
+      'Cash',
+      undefined,
+      { paymentMethod: method, note: note || undefined }
+    );
   };
 
   // Handler: Confirm a payment status change from the Customers screen (Cash/Debt/Credit/OldPayment)
@@ -697,6 +758,20 @@ export default function App() {
     showToast('ลบรายการรายจ่ายเรียบร้อยแล้ว');
   };
 
+  // Handler: Add new Expense Category
+  const handleAddExpenseCategory = (category: Omit<ExpenseCategory, 'id'>) => {
+    const newCategory: ExpenseCategory = {
+      ...category,
+      id: `ECAT-${Date.now().toString().slice(-4)}`,
+    };
+    setExpenseCategories((prev) => [...prev, newCategory]);
+  };
+
+  // Handler: Delete Expense Category
+  const handleDeleteExpenseCategory = (id: string) => {
+    setExpenseCategories((prev) => prev.filter((c) => c.id !== id));
+  };
+
   // Employee Handlers
   const handleAddEmployee = (employee: Omit<Employee, 'id'>) => {
     const newEmployee: Employee = { ...employee, id: `EMP-${Date.now().toString().slice(-6)}` };
@@ -719,6 +794,16 @@ export default function App() {
 
   const handleDeleteAttendance = (id: string) => {
     setAttendanceRecords((prev) => prev.filter((r) => r.id !== id));
+  };
+
+  // Employee Loan Handlers
+  const handleAddLoan = (loan: Omit<EmployeeLoan, 'id'>) => {
+    const newLoan: EmployeeLoan = { ...loan, id: `LOAN-${Date.now().toString().slice(-6)}` };
+    setEmployeeLoans((prev) => [newLoan, ...prev]);
+  };
+
+  const handleDeleteLoan = (id: string) => {
+    setEmployeeLoans((prev) => prev.filter((l) => l.id !== id));
   };
 
   // Vehicle Handlers
@@ -756,6 +841,9 @@ export default function App() {
     monthlyExpenses,
     recentDeliveries,
     icePurchaseCost: currentIcePurchaseCost,
+    routes,
+    truckRecords,
+    warehouseLogs,
   });
 
   if (!activeAdminObj) {
@@ -825,6 +913,7 @@ export default function App() {
             onDeleteCustomer={handleDeleteCustomer}
             onOpenPriceModal={(customer) => setCustomerForPriceModal(customer)}
             onOpenNewAndOldModal={(customer) => setNewAndOldModalCustomer(customer)}
+            onOpenSublineCash={() => setActiveTab('sublineCash')}
             onOpenRouteManager={() => setIsRouteManagerOpen(true)}
             onOpenProductManager={() => setIsProductManagerOpen(true)}
             onOpenStatusLabelsModal={() => setIsStatusLabelsModalOpen(true)}
@@ -834,6 +923,26 @@ export default function App() {
             selectedDate={selectedDate}
             onDateChange={(d) => setSelectedDate(d)}
             currentShift={currentShift}
+          />
+        )}
+
+        {activeTab === 'sublineCash' && (
+          <SublineCashView
+            customers={customers}
+            routes={routes}
+            recentDeliveries={recentDeliveries}
+            selectedDate={selectedDate}
+            onDateChange={(d) => setSelectedDate(d)}
+            onAddCustomer={handleAddCustomer}
+            onDeleteCustomer={(id, name) => {
+              if (confirm(`คุณต้องการลบรายชื่อ "${name}" หรือไม่?`)) {
+                handleDeleteCustomer(id);
+                showToast(`ลบชื่อ "${name}" เรียบร้อยแล้ว`);
+              }
+            }}
+            onRecordPayment={handleRecordSublinePayment}
+            onBack={() => setActiveTab('customers')}
+            onShowToast={showToast}
           />
         )}
 
@@ -874,11 +983,13 @@ export default function App() {
 
         {activeTab === 'summary' && (
           <SummaryView
-            summaryData={summaryData}
+            recentDeliveries={recentDeliveries}
             expenses={expenses}
             monthlyExpenses={monthlyExpenses}
             customers={customers}
+            routes={routes}
             products={products}
+            roleLevel={roleLevel}
             selectedDate={selectedDate}
             onDateChange={(d) => setSelectedDate(d)}
             icePurchaseCost={currentIcePurchaseCost}
@@ -895,7 +1006,9 @@ export default function App() {
           <ExpensesView
             expenses={expenses}
             routes={routes}
+            categories={expenseCategories}
             onOpenAddExpenseModal={() => setIsAddExpenseOpen(true)}
+            onOpenCategoryManager={() => setIsExpenseCategoryManagerOpen(true)}
             onDeleteExpense={handleDeleteExpense}
           />
         )}
@@ -906,6 +1019,7 @@ export default function App() {
             selectedDate={selectedDate}
             onDateChange={(d) => setSelectedDate(d)}
             roleLevel={roleLevel}
+            activeAdminName={activeAdminName}
           />
         )}
 
@@ -925,10 +1039,13 @@ export default function App() {
           <AttendanceView
             employees={employees}
             attendanceRecords={attendanceRecords}
+            employeeLoans={employeeLoans}
             selectedDate={selectedDate}
             onDateChange={(d) => setSelectedDate(d)}
             onAddAttendance={handleAddAttendance}
             onDeleteAttendance={handleDeleteAttendance}
+            onAddLoan={handleAddLoan}
+            onDeleteLoan={handleDeleteLoan}
             onShowToast={showToast}
           />
         )}
@@ -957,7 +1074,17 @@ export default function App() {
         isOpen={isAddExpenseOpen}
         onClose={() => setIsAddExpenseOpen(false)}
         routes={routes}
+        categories={expenseCategories}
         onAddExpense={handleAddExpense}
+        onShowToast={showToast}
+      />
+
+      <ExpenseCategoryManagerModal
+        isOpen={isExpenseCategoryManagerOpen}
+        onClose={() => setIsExpenseCategoryManagerOpen(false)}
+        categories={expenseCategories}
+        onAddCategory={handleAddExpenseCategory}
+        onDeleteCategory={handleDeleteExpenseCategory}
         onShowToast={showToast}
       />
 

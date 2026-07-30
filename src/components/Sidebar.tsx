@@ -1,6 +1,7 @@
 import React from 'react';
 import { RoleLevel, TabType } from '../types';
 import { canAccessTab } from '../lib/permissions';
+import { resolveAdminAvatarByName } from '../lib/adminAvatars';
 
 interface SidebarProps {
   activeTab: TabType;
@@ -16,6 +17,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
   roleLevel,
 }) => {
   const can = (tab: TabType) => canAccessTab(roleLevel, tab);
+  const avatarUrl = resolveAdminAvatarByName(shiftWorker);
 
   return (
     <aside className="hidden lg:flex fixed left-0 top-16 h-[calc(100vh-64px)] w-72 bg-[#EBF2F7] border-r border-[#D2E0EB] shadow-xs flex-col py-6 px-4 z-40">
@@ -23,11 +25,13 @@ export const Sidebar: React.FC<SidebarProps> = ({
       <div className="pb-6 border-b border-[#D2E0EB] mb-6 px-2">
         <div className="flex items-center gap-3">
           <div className="w-12 h-12 rounded-full overflow-hidden border-2 border-[#1E3A5F]/30 flex-shrink-0">
-            <img
-              src="https://lh3.googleusercontent.com/aida-public/AB6AXuBoxSqaU3j7_k-RFKACS1tBB-yjdZQd1mx9lbw6k10sj0YNLSvPN87cMZalBbQijMhO8-Siuhfb7mT8XNI6zSAzb2fNFJ1eqXtrx2vRlzceg2CVSeoadmy2SYLjH9RFRM2ZYBpnWwyHZQbfC5rVirMk2hea8AgYGy1q4V1zNYhuGVH4ERC1T0n-_172L7k_dUSQLgS2hsRdPr_V7RcWdb1PKZ4GJ9BYEhaeORpiY1E0TvwC2PwKWawmhjA8DZhNREcPvBSdzjkMxMn8"
-              alt="Manager Avatar"
-              className="w-full h-full object-cover"
-            />
+            {avatarUrl ? (
+              <img src={avatarUrl} alt={shiftWorker} className="w-full h-full object-cover" />
+            ) : (
+              <div className="w-full h-full flex items-center justify-center bg-gradient-to-br from-[#0284C7] to-[#1E3A5F] text-white font-bold text-lg">
+                {shiftWorker.charAt(0)}
+              </div>
+            )}
           </div>
           <div className="overflow-hidden">
             <h3 className="font-semibold text-[#1E293B] text-sm truncate">
